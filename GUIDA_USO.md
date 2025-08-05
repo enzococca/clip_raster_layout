@@ -16,11 +16,15 @@
    - Apre automaticamente il pannello "Profilo Elevazione" di QGIS
 
 ### 3. Configurazione del profilo elevazione QGIS
-1. Nel pannello "Profilo Elevazione" di QGIS che si è aperto:
-   - Seleziona la linea di sezione appena creata
-   - Verifica che il DEM sia visibile nel profilo
-   - Personalizza colori e stile se necessario
-2. Ripeti per ogni sezione (massimo 6)
+1. Nel dock widget "Profili DEM", clicca su **"Crea tutti i Profili Elevazione"**
+   - Questo creerà automaticamente un profilo elevazione QGIS per ogni sezione
+   - Ogni profilo avrà il nome della sezione (A-B, C-D, ecc.)
+   - I profili si apriranno come finestre separate
+
+2. Alternativa manuale:
+   - Clicca "Apri Profilo Elevazione QGIS" per aprire il pannello
+   - Seleziona manualmente ogni linea di sezione
+   - Il DEM dovrebbe essere visibile automaticamente nel profilo
 
 ### 4. Generazione del layout
 1. Vai su "Genera Layout Professionale"
