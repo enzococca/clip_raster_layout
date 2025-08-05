@@ -1,0 +1,5 @@
+<RCC>
+  <qresource prefix="/plugins/clip_raster_layout" >
+    <file>icon.png</file>
+  </qresource>
+</RCC>

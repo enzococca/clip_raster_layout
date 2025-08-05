@@ -1,0 +1,564 @@
+# -*- coding: utf-8 -*-
+from qgis.PyQt.QtCore import Qt, QRectF, QPointF, QSizeF, QDateTime
+from qgis.PyQt.QtWidgets import QApplication
+from qgis.PyQt.QtGui import QFont, QColor, QPainter
+from qgis.PyQt.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
+                               QComboBox, QPushButton, QCheckBox, QLineEdit,
+                               QGroupBox, QFormLayout, QSpinBox, QMessageBox,
+                               QTextEdit, QFileDialog)
+from qgis.core import (QgsProject, QgsLayout, QgsPrintLayout, QgsLayoutItemMap,
+                      QgsLayoutItemLabel, QgsLayoutItemScaleBar, QgsLayoutItemPicture,
+                      QgsLayoutItemLegend, QgsLayoutPoint, QgsLayoutSize,
+                      QgsUnitTypes, QgsLayoutExporter, QgsLayoutItemShape,
+                      QgsLayoutItemPolyline, QgsTextFormat, QgsVectorLayer,
+                      QgsRasterLayer, QgsLayoutMeasurement, QgsLayoutItemPage,
+                      QgsLayoutItemPicture, QgsLayoutNorthArrowHandler,
+                      QgsLayoutItemAttributeTable, QgsLayoutTableColumn,
+                      QgsLayoutFrame, QgsLayoutMultiFrame, QgsRectangle,
+                      QgsCoordinateReferenceSystem, QgsCoordinateTransform,
+                      QgsLayoutRenderContext, QgsLayoutItem, QgsLayoutItemMapOverview,
+                      QgsLayoutItemHtml, QgsSymbol, QgsScaleBarSettings)
+
+# Try to import elevation profile (QGIS 3.26+)
+try:
+    from qgis.core import QgsLayoutItemElevationProfile, QgsProfileRequest
+    HAS_ELEVATION_PROFILE = True
+except ImportError:
+    HAS_ELEVATION_PROFILE = False
+import os
+from datetime import datetime
+
+class LayoutGenerator(QDialog):
+    def __init__(self, iface, parent=None):
+        super().__init__(parent)
+        self.iface = iface
+        self.setupUi()
+        self.populate_layers()
+        self.profile_path = None
+        
+    def setupUi(self):
+        self.setWindowTitle("Genera Layout Professionale")
+        self.setMinimumWidth(600)
+        
+        layout = QVBoxLayout()
+        
+        # Raster selection
+        raster_group = QGroupBox("Selezione Raster")
+        raster_layout = QFormLayout()
+        
+        self.raster_combo = QComboBox()
+        raster_layout.addRow("Raster principale:", self.raster_combo)
+        
+        self.use_clipped = QCheckBox("Usa raster clippato")
+        self.use_clipped.setChecked(True)
+        raster_layout.addRow(self.use_clipped)
+        
+        raster_group.setLayout(raster_layout)
+        layout.addWidget(raster_group)
+        
+        # Profile selection
+        profile_group = QGroupBox("Profilo")
+        profile_layout = QFormLayout()
+        
+        self.profile_combo = QComboBox()
+        profile_layout.addRow("Profilo da includere:", self.profile_combo)
+        
+        self.include_profile = QCheckBox("Includi profilo nel layout")
+        self.include_profile.setChecked(True)
+        profile_layout.addRow(self.include_profile)
+        
+        profile_group.setLayout(profile_layout)
+        layout.addWidget(profile_group)
+        
+        # Layout settings
+        settings_group = QGroupBox("Impostazioni Layout")
+        settings_layout = QFormLayout()
+        
+        self.title_edit = QLineEdit("Analisi Topografica")
+        settings_layout.addRow("Titolo:", self.title_edit)
+        
+        self.author_edit = QLineEdit()
+        settings_layout.addRow("Autore:", self.author_edit)
+        
+        self.scale_combo = QComboBox()
+        scales = ["1:1", "1:10", "1:20", "1:50", "1:100", "1:200", "1:500", 
+                  "1:1000", "1:2000", "1:5000", "1:10000", "1:25000", "1:50000", 
+                  "1:100000", "1:250000", "1:500000"]
+        self.scale_combo.addItems(scales)
+        self.scale_combo.setEditable(True)  # Allow custom scales
+        self.scale_combo.setCurrentIndex(7)  # Default 1:1000
+        settings_layout.addRow("Scala:", self.scale_combo)
+        
+        self.paper_combo = QComboBox()
+        self.paper_combo.addItems(["A4 Orizzontale", "A3 Orizzontale", "A2 Orizzontale", "A1 Orizzontale"])
+        self.paper_combo.setCurrentIndex(1)  # Default A3
+        settings_layout.addRow("Formato carta:", self.paper_combo)
+        
+        self.logo_path = QLineEdit()
+        logo_button = QPushButton("Sfoglia...")
+        logo_button.clicked.connect(self.select_logo)
+        logo_layout = QHBoxLayout()
+        logo_layout.addWidget(self.logo_path)
+        logo_layout.addWidget(logo_button)
+        settings_layout.addRow("Logo:", logo_layout)
+        
+        self.notes_edit = QTextEdit()
+        self.notes_edit.setMaximumHeight(60)
+        settings_layout.addRow("Note:", self.notes_edit)
+        
+        settings_group.setLayout(settings_layout)
+        layout.addWidget(settings_group)
+        
+        # Components to include
+        components_group = QGroupBox("Componenti da includere")
+        components_layout = QVBoxLayout()
+        
+        self.include_north = QCheckBox("Freccia del Nord")
+        self.include_north.setChecked(True)
+        components_layout.addWidget(self.include_north)
+        
+        self.include_scale = QCheckBox("Barra di scala")
+        self.include_scale.setChecked(True)
+        components_layout.addWidget(self.include_scale)
+        
+        self.include_legend = QCheckBox("Legenda")
+        self.include_legend.setChecked(True)
+        components_layout.addWidget(self.include_legend)
+        
+        self.include_overview = QCheckBox("Mappa di inquadramento")
+        self.include_overview.setChecked(True)
+        components_layout.addWidget(self.include_overview)
+        
+        self.include_grid = QCheckBox("Griglia coordinate")
+        self.include_grid.setChecked(True)
+        components_layout.addWidget(self.include_grid)
+        
+        self.include_metadata = QCheckBox("Tabella metadati")
+        self.include_metadata.setChecked(True)
+        components_layout.addWidget(self.include_metadata)
+        
+        components_group.setLayout(components_layout)
+        layout.addWidget(components_group)
+        
+        # Buttons
+        button_layout = QHBoxLayout()
+        
+        self.generate_button = QPushButton("Genera Layout")
+        self.generate_button.clicked.connect(self.generate_layout)
+        button_layout.addWidget(self.generate_button)
+        
+        self.export_button = QPushButton("Esporta PDF")
+        self.export_button.clicked.connect(self.export_pdf)
+        self.export_button.setEnabled(False)
+        button_layout.addWidget(self.export_button)
+        
+        self.close_button = QPushButton("Chiudi")
+        self.close_button.clicked.connect(self.close)
+        button_layout.addWidget(self.close_button)
+        
+        layout.addLayout(button_layout)
+        self.setLayout(layout)
+        
+        self.current_layout = None
+        
+    def showEvent(self, event):
+        super().showEvent(event)
+        self.populate_layers()
+        
+    def populate_layers(self):
+        self.raster_combo.clear()
+        self.profile_combo.clear()
+        
+        # Populate raster layers
+        for layer in QgsProject.instance().mapLayers().values():
+            if isinstance(layer, QgsRasterLayer):
+                self.raster_combo.addItem(layer.name(), layer)
+                
+        # Add profile options
+        self.profile_combo.addItem("Nessuno", None)
+        
+        # Check for profile layer
+        for layer in QgsProject.instance().mapLayers().values():
+            if layer.name() == "Profili DEM" and isinstance(layer, QgsVectorLayer):
+                # Add each profile feature
+                for feature in layer.getFeatures():
+                    profile_name = feature['name']
+                    if profile_name:
+                        self.profile_combo.addItem(profile_name, feature)
+        
+    def select_logo(self):
+        file_path, _ = QFileDialog.getOpenFileName(self, "Seleziona Logo", "", "Immagini (*.png *.jpg *.jpeg *.svg)")
+        if file_path:
+            self.logo_path.setText(file_path)
+            
+    def generate_layout(self):
+        raster_layer = self.raster_combo.currentData()
+        if not raster_layer:
+            QMessageBox.warning(self, "Attenzione", "Seleziona un raster")
+            return
+            
+        # Create layout
+        project = QgsProject.instance()
+        layout_name = f"Layout_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        layout = QgsPrintLayout(project)
+        layout.initializeDefaults()
+        layout.setName(layout_name)
+        
+        # Set page size based on selection
+        page = layout.pageCollection().page(0)
+        paper_sizes = {
+            "A4 Orizzontale": (297, 210),
+            "A3 Orizzontale": (420, 297),
+            "A2 Orizzontale": (594, 420),
+            "A1 Orizzontale": (841, 594)
+        }
+        
+        size = paper_sizes[self.paper_combo.currentText()]
+        page.setPageSize(QgsLayoutSize(size[0], size[1], QgsUnitTypes.LayoutMillimeters))
+        
+        # Main map - using template coordinates for A3
+        map_item = QgsLayoutItemMap(layout)
+        if self.paper_combo.currentText() == "A3 Orizzontale":
+            map_item.setRect(2.15, 14.18, 292.59, 146.92)
+        else:
+            # Scale proportionally for other sizes
+            map_item.setRect(20, 40, size[0] * 0.7, size[1] * 0.65)
+        
+        # Calculate extent based on raster and profiles
+        extent = raster_layer.extent()
+        
+        # Check if we need to include profile lines
+        profile_layer = None
+        for layer in QgsProject.instance().mapLayers().values():
+            if layer.name() == "Profili DEM":
+                profile_layer = layer
+                # Expand extent to include all profiles
+                profile_extent = layer.extent()
+                if not profile_extent.isEmpty():
+                    extent.combineExtentWith(profile_extent)
+                break
+        
+        # Add 10% buffer
+        extent = extent.buffered(extent.width() * 0.1)
+        map_item.setExtent(extent)
+        
+        # Set scale
+        scale_text = self.scale_combo.currentText()
+        scale_value = int(scale_text.split(':')[1])
+        map_item.setScale(scale_value)
+        
+        # Add grid if requested
+        if self.include_grid.isChecked():
+            map_item.grid().setEnabled(True)
+            map_item.grid().setIntervalX(extent.width() / 10)
+            map_item.grid().setIntervalY(extent.height() / 10)
+            map_item.grid().setGridLineWidth(0.1)
+            map_item.grid().setGridLineColor(QColor(100, 100, 100, 100))
+            
+        # Add frame to map
+        map_item.setFrameEnabled(True)
+        map_item.setFrameStrokeWidth(QgsLayoutMeasurement(0.5, QgsUnitTypes.LayoutMillimeters))
+            
+        layout.addLayoutItem(map_item)
+        
+        # Title - centered at top
+        title = QgsLayoutItemLabel(layout)
+        title.setText(self.title_edit.text())
+        title.setFont(QFont("Arial", 20, QFont.Bold))
+        title.setHAlign(Qt.AlignHCenter)
+        title.attemptMove(QgsLayoutPoint(size[0]/2 - 50, 4, QgsUnitTypes.LayoutMillimeters))
+        title.attemptResize(QgsLayoutSize(100, 18, QgsUnitTypes.LayoutMillimeters))
+        layout.addLayoutItem(title)
+        
+        # North arrow
+        if self.include_north.isChecked():
+            north = QgsLayoutItemPicture(layout)
+            north.setMode(QgsLayoutItemPicture.FormatSVG)
+            north.setPicturePath(":/images/north_arrows/layout_default_north_arrow.svg")
+            north.setReferencePoint(QgsLayoutItem.UpperRight)
+            north.attemptMove(QgsLayoutPoint(12.7, 18.9, QgsUnitTypes.LayoutMillimeters))
+            north.attemptResize(QgsLayoutSize(8.7, 11.6, QgsUnitTypes.LayoutMillimeters))
+            north.setFrameEnabled(True)
+            north.setFrameStrokeWidth(QgsLayoutMeasurement(0.3, QgsUnitTypes.LayoutMillimeters))
+            layout.addLayoutItem(north)
+            
+        # Scale bar
+        if self.include_scale.isChecked():
+            scalebar = QgsLayoutItemScaleBar(layout)
+            scalebar.setLinkedMap(map_item)
+            scalebar.setUnits(QgsUnitTypes.DistanceMeters)
+            scalebar.setNumberOfSegments(4)
+            scalebar.setNumberOfSegmentsLeft(0)
+            
+            # Calculate appropriate segment size based on scale
+            # For scales, we want nice round numbers
+            if scale_value <= 100:
+                units_per_segment = 10
+            elif scale_value <= 500:
+                units_per_segment = 50
+            elif scale_value <= 1000:
+                units_per_segment = 100
+            elif scale_value <= 2000:
+                units_per_segment = 200
+            elif scale_value <= 5000:
+                units_per_segment = 500
+            elif scale_value <= 10000:
+                units_per_segment = 1000
+            elif scale_value <= 25000:
+                units_per_segment = 2500
+            elif scale_value <= 50000:
+                units_per_segment = 5000
+            elif scale_value <= 100000:
+                units_per_segment = 10000
+            else:
+                units_per_segment = 25000
+                
+            scalebar.setUnitsPerSegment(units_per_segment)
+            scalebar.setSegmentSizeMode(QgsScaleBarSettings.SegmentSizeFixed)
+            scalebar.setMinimumBarWidth(50)
+            scalebar.setMaximumBarWidth(150)
+            
+            # Set style
+            scalebar.setStyle('Single Box')
+            scalebar.setFont(QFont("Arial", 10))
+            scalebar.setHeight(3)
+            
+            if self.paper_combo.currentText() == "A3 Orizzontale":
+                scalebar.attemptMove(QgsLayoutPoint(88.96, 150.16, QgsUnitTypes.LayoutMillimeters))
+            else:
+                scalebar.attemptMove(QgsLayoutPoint(20, size[1] - 40, QgsUnitTypes.LayoutMillimeters))
+                
+            scalebar.setFrameEnabled(True)
+            scalebar.setFrameStrokeWidth(QgsLayoutMeasurement(0.3, QgsUnitTypes.LayoutMillimeters))
+            layout.addLayoutItem(scalebar)
+            
+        # Legend
+        if self.include_legend.isChecked():
+            legend = QgsLayoutItemLegend(layout)
+            legend.setLinkedMap(map_item)
+            legend.setTitle("Legenda")
+            
+            # Only show layers that are in the map
+            legend.setAutoUpdateModel(False)
+            
+            # Remove all existing layers from legend
+            root = legend.model().rootGroup()
+            root.removeAllChildren()
+            
+            # Add only the selected raster layer
+            if raster_layer:
+                root.addLayer(raster_layer)
+                
+            # Add profile layer if it exists
+            for layer in QgsProject.instance().mapLayers().values():
+                if layer.name() == "Profili DEM":
+                    root.addLayer(layer)
+                    break
+                    
+            if self.paper_combo.currentText() == "A3 Orizzontale":
+                legend.attemptMove(QgsLayoutPoint(209.9, 70, QgsUnitTypes.LayoutMillimeters))
+                legend.attemptResize(QgsLayoutSize(80, 30, QgsUnitTypes.LayoutMillimeters))
+            else:
+                legend.attemptMove(QgsLayoutPoint(size[0] * 0.75, 70, QgsUnitTypes.LayoutMillimeters))
+                legend.attemptResize(QgsLayoutSize(size[0] * 0.2, 40, QgsUnitTypes.LayoutMillimeters))
+            legend.setFrameEnabled(True)
+            legend.setFrameStrokeWidth(QgsLayoutMeasurement(0.3, QgsUnitTypes.LayoutMillimeters))
+            layout.addLayoutItem(legend)
+            
+        # Overview map
+        if self.include_overview.isChecked():
+            overview = QgsLayoutItemMap(layout)
+            if self.paper_combo.currentText() == "A3 Orizzontale":
+                overview.setRect(246.39, 19.15, 44.55, 46.44)
+            else:
+                overview.setRect(size[0] * 0.75, 20, size[0] * 0.2, size[1] * 0.25)
+            
+            # Set larger extent for overview
+            overview_extent = extent.buffered(extent.width() * 0.5)
+            overview.setExtent(overview_extent)
+            
+            # Add frame
+            overview.setFrameEnabled(True)
+            overview.setFrameStrokeWidth(QgsLayoutMeasurement(0.5, QgsUnitTypes.LayoutMillimeters))
+            
+            # Add overview indicator
+            overview_item = QgsLayoutItemMapOverview('overview', overview)
+            overview_item.setLinkedMap(map_item)
+            overview.overviews().addOverview(overview_item)
+            layout.addLayoutItem(overview)
+            
+        # Profile graph
+        if self.include_profile.isChecked() and self.profile_combo.currentData():
+            # Check if native elevation profile is available
+            if HAS_ELEVATION_PROFILE:
+                try:
+                    self.add_native_elevation_profile(layout, size)
+                except Exception as e:
+                    print(f"Native profile failed: {e}, using custom method")
+                    self.add_profile_graph(layout, size)
+            else:
+                # Use custom method for older QGIS versions
+                self.add_profile_graph(layout, size)
+            
+        # Metadata table
+        if self.include_metadata.isChecked():
+            self.add_metadata_table(layout, raster_layer, size)
+            
+        # Logo
+        if self.logo_path.text():
+            logo = QgsLayoutItemPicture(layout)
+            logo.setPicturePath(self.logo_path.text())
+            logo.setReferencePoint(QgsLayoutItem.UpperRight)
+            logo.attemptMove(QgsLayoutPoint(size[0] - 50, size[1] - 40, QgsUnitTypes.LayoutMillimeters))
+            logo.attemptResize(QgsLayoutSize(40, 30, QgsUnitTypes.LayoutMillimeters))
+            layout.addLayoutItem(logo)
+            
+        # Add layout to project
+        project.layoutManager().addLayout(layout)
+        
+        self.current_layout = layout
+        self.export_button.setEnabled(True)
+        
+        # Open layout designer
+        self.iface.openLayoutDesigner(layout)
+        
+        QMessageBox.information(self, "Successo", "Layout generato con successo!")
+        
+    def add_native_elevation_profile(self, layout, page_size):
+        """Add elevation profile using QGIS native elevation profile tool"""
+        profile_feature = self.profile_combo.currentData()
+        if not profile_feature:
+            return
+            
+        # For now, raise exception to force using the custom method
+        # The native profile requires more complex setup
+        raise Exception("Native profile not fully implemented, using custom method")
+        
+    def add_profile_graph(self, layout, page_size):
+        """Add the selected profile graph to the layout"""
+        profile_feature = self.profile_combo.currentData()
+        if not profile_feature:
+            print("No profile feature selected")
+            return
+            
+        # Get clean profile name (without path if present)
+        profile_name = profile_feature['name']
+        if '|' in profile_name:
+            profile_name = profile_name.split('|')[0]
+        
+        print(f"Adding profile: {profile_name}")
+        
+        # Import at the beginning
+        import os
+        import tempfile
+        
+        # First try to get path from project custom properties
+        profile_path, _ = QgsProject.instance().readEntry("ClipRasterLayout", f"profile_{profile_name}")
+        
+        if not profile_path or not os.path.exists(profile_path):
+            # Try profile save directory
+            save_dir, _ = QgsProject.instance().readEntry("ClipRasterLayout", "profile_save_dir")
+            if save_dir and os.path.exists(save_dir):
+                profile_path = os.path.join(save_dir, f"profile_{profile_name}.png")
+            else:
+                # Fallback to temp directory
+                temp_dir = tempfile.gettempdir()
+                profile_path = os.path.join(temp_dir, f"profile_{profile_name}.png")
+        
+        # Debug: check if file exists
+        print(f"Looking for profile at: {profile_path}")
+        print(f"File exists: {os.path.exists(profile_path)}")
+        
+        # List all profile files in directory where we're looking
+        profile_dir = os.path.dirname(profile_path)
+        if os.path.exists(profile_dir):
+            print(f"Available profile files in {profile_dir}:")
+            for file in os.listdir(profile_dir):
+                if file.startswith("profile_") and file.endswith(".png"):
+                    print(f"  - {file}")
+        
+        if os.path.exists(profile_path):
+            # Add image to layout
+            profile_pic = QgsLayoutItemPicture(layout)
+            profile_pic.setPicturePath(profile_path)
+            
+            # Position at bottom of page
+            if self.paper_combo.currentText() == "A3 Orizzontale":
+                profile_pic.attemptMove(QgsLayoutPoint(3.99, 168.75, QgsUnitTypes.LayoutMillimeters))
+                profile_pic.attemptResize(QgsLayoutSize(287.19, 38.87, QgsUnitTypes.LayoutMillimeters))
+            else:
+                # Adapt for other page sizes
+                profile_pic.attemptMove(QgsLayoutPoint(10, page_size[1] - 50, QgsUnitTypes.LayoutMillimeters))
+                profile_pic.attemptResize(QgsLayoutSize(page_size[0] - 20, 40, QgsUnitTypes.LayoutMillimeters))
+                
+            profile_pic.setFrameEnabled(True)
+            profile_pic.setFrameStrokeWidth(QgsLayoutMeasurement(0.5, QgsUnitTypes.LayoutMillimeters))
+            
+            # Set resize mode to zoom
+            profile_pic.setResizeMode(QgsLayoutItemPicture.Zoom)
+            
+            layout.addLayoutItem(profile_pic)
+            print(f"Profile image added to layout")
+        else:
+            print(f"Profile image not found at {profile_path}")
+            QMessageBox.warning(None, "Attenzione", 
+                f"Immagine del profilo non trovata.\n"
+                f"Assicurati di aver generato il profilo '{profile_name}' prima di creare il layout.")
+    
+    def add_metadata_table(self, layout, raster_layer, page_size):
+        # Create frame for metadata  
+        # Metadata position based on template
+        frame_x = 209.9
+        frame_y = 107
+        frame_width = 80
+        frame_height = 36
+        
+        # Create metadata box with frame
+        metadata_box = QgsLayoutItemShape(layout)
+        metadata_box.setShapeType(QgsLayoutItemShape.Rectangle)
+        metadata_box.attemptMove(QgsLayoutPoint(frame_x, frame_y, QgsUnitTypes.LayoutMillimeters))
+        metadata_box.attemptResize(QgsLayoutSize(frame_width, frame_height, QgsUnitTypes.LayoutMillimeters))
+        metadata_box.setFrameEnabled(True)
+        metadata_box.setFrameStrokeWidth(QgsLayoutMeasurement(0.3, QgsUnitTypes.LayoutMillimeters))
+        layout.addLayoutItem(metadata_box)
+        
+        # Add metadata labels
+        y_offset = 2
+        metadata = [
+            ("Data:", datetime.now().strftime("%d/%m/%Y")),
+            ("Sistema di riferimento:", raster_layer.crs().authid()),
+            ("Scala:", self.scale_combo.currentText()),
+            ("Autore:", self.author_edit.text() or "N/D"),
+            ("Formato:", os.path.splitext(raster_layer.source())[1].upper()),
+            ("Dimensioni:", f"{raster_layer.width()} x {raster_layer.height()} px")
+        ]
+        
+        for label_text, value_text in metadata:
+            label = QgsLayoutItemLabel(layout)
+            label.setText(f"{label_text} {value_text}")
+            label.setFont(QFont("Arial", 7))
+            label.attemptMove(QgsLayoutPoint(
+                frame_x + 2, 
+                frame_y + y_offset,
+                QgsUnitTypes.LayoutMillimeters))
+            layout.addLayoutItem(label)
+            y_offset += 6
+            
+    def export_pdf(self):
+        if not self.current_layout:
+            return
+            
+        file_path, _ = QFileDialog.getSaveFileName(self, "Esporta PDF", "", "PDF Files (*.pdf)")
+        if file_path:
+            exporter = QgsLayoutExporter(self.current_layout)
+            
+            settings = QgsLayoutExporter.PdfExportSettings()
+            settings.dpi = 300
+            settings.rasterizeWholeImage = False
+            
+            result = exporter.exportToPdf(file_path, settings)
+            
+            if result == QgsLayoutExporter.Success:
+                QMessageBox.information(self, "Successo", "PDF esportato con successo!")
+            else:
+                QMessageBox.warning(self, "Errore", "Errore nell'esportazione del PDF")
