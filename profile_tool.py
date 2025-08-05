@@ -8,6 +8,14 @@ from qgis.core import (QgsPointXY, QgsGeometry, QgsFeature,
                       QgsLineString, QgsPoint, QgsRaster, QgsRasterIdentifyResult,
                       QgsSymbol, QgsSimpleLineSymbolLayer, QgsMarkerSymbol,
                       QgsSimpleMarkerSymbolLayer, QgsTextAnnotation, QgsMessageLog, Qgis)
+
+# Try to import elevation profile tools (QGIS 3.26+)
+try:
+    from qgis.gui import QgsElevationProfileCanvas, QgsElevationProfilePlotItem
+    from qgis.core import QgsProfileRequest, QgsProfilePlotRenderer
+    HAS_ELEVATION_PROFILE = True
+except ImportError:
+    HAS_ELEVATION_PROFILE = False
 from qgis.gui import QgsMapToolEmitPoint, QgsRubberBand, QgsMapCanvas, QgsMapTool, QgsMapCanvasAnnotationItem
 import numpy as np
 import math
@@ -29,6 +37,7 @@ class ProfileTool(QgsMapTool):
         self.profile_layer = None
         self.labels = []
         self.current_feature_id = None
+        self.elevation_profiles = []  # Store QGIS elevation profile widgets
         
         # Create profile layer
         self.create_profile_layer()
@@ -156,6 +165,10 @@ class ProfileTool(QgsMapTool):
             
             # Extract and show profile (will update length_3d)
             self.extract_profile(self.start_point, end_point, letter_pair)
+            
+            # Create QGIS elevation profile if available and less than 6 profiles
+            if HAS_ELEVATION_PROFILE and self.profile_count < 6:
+                self.create_qgis_elevation_profile(feature.geometry(), letter_pair)
             
             # Reset
             self.canvas.scene().removeItem(self.rubberBand)
@@ -360,6 +373,49 @@ class ProfileTool(QgsMapTool):
             QgsProject.instance().writeEntry("ClipRasterLayout", f"profile_{name}", profile_path)
         
         dlg.exec_()
+        
+    def create_qgis_elevation_profile(self, geometry, name):
+        """Create QGIS native elevation profile widget"""
+        try:
+            # Create elevation profile canvas
+            profile_canvas = QgsElevationProfileCanvas()
+            profile_canvas.setWindowTitle(f"Profilo Elevazione {name}")
+            
+            # Set the profile curve
+            profile_canvas.setProfileCurve(geometry)
+            
+            # Set the CRS
+            profile_canvas.setCrs(self.canvas.mapSettings().destinationCrs())
+            
+            # Find and add DEM layer
+            if self.dem_layer:
+                # Get project's elevation properties
+                elevation_properties = QgsProject.instance().elevationProperties()
+                if elevation_properties:
+                    # Enable terrain (if DEM is set as terrain provider)
+                    profile_canvas.setLayers([self.dem_layer])
+            
+            # Set some visual properties
+            profile_canvas.setVisiblePlotRange(0, geometry.length(), 0, 0)
+            
+            # Show the profile canvas
+            profile_canvas.show()
+            profile_canvas.refresh()
+            
+            # Store reference
+            self.elevation_profiles.append({
+                'name': name,
+                'canvas': profile_canvas,
+                'geometry': geometry
+            })
+            
+            # Store in project custom properties for later use in layout
+            QgsProject.instance().writeEntry("ClipRasterLayout", f"elevation_profile_{name}", "created")
+            
+            QgsMessageLog.logMessage(f"Created QGIS elevation profile for {name}", "ClipRasterLayout", Qgis.Info)
+            
+        except Exception as e:
+            QgsMessageLog.logMessage(f"Failed to create QGIS elevation profile: {str(e)}", "ClipRasterLayout", Qgis.Warning)
         
 class DemSelectionDialog(QDialog):
     def __init__(self, iface, parent=None):

@@ -156,6 +156,14 @@ class LayoutGenerator(QDialog):
         self.close_button.clicked.connect(self.close)
         button_layout.addWidget(self.close_button)
         
+        # Template selection
+        template_layout = QHBoxLayout()
+        template_layout.addWidget(QLabel("Template:"))
+        self.template_checkbox = QCheckBox("Usa template_layout.qpt")
+        self.template_checkbox.setChecked(True)
+        template_layout.addWidget(self.template_checkbox)
+        layout.addLayout(template_layout)
+        
         layout.addLayout(button_layout)
         self.setLayout(layout)
         
@@ -200,6 +208,27 @@ class LayoutGenerator(QDialog):
         # Create layout
         project = QgsProject.instance()
         layout_name = f"Layout_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        
+        # Check if we should use template
+        if self.template_checkbox.isChecked():
+            # Load template
+            template_path = os.path.join(os.path.dirname(__file__), "template_layout.qpt")
+            if os.path.exists(template_path):
+                layout = self.load_template_layout(template_path, layout_name)
+                if layout:
+                    self.populate_template_layout(layout, raster_layer)
+                    # Add layout to project
+                    project.layoutManager().addLayout(layout)
+                    self.current_layout = layout
+                    self.export_button.setEnabled(True)
+                    # Open layout designer
+                    self.iface.openLayoutDesigner(layout)
+                    QMessageBox.information(self, "Successo", "Layout generato con successo dal template!")
+                    return
+                else:
+                    QgsMessageLog.logMessage("Failed to load template, creating new layout", "ClipRasterLayout", Qgis.Warning)
+        
+        # Create new layout if template not used or failed
         layout = QgsPrintLayout(project)
         layout.initializeDefaults()
         layout.setName(layout_name)
@@ -624,3 +653,146 @@ class LayoutGenerator(QDialog):
                 QMessageBox.information(self, "Successo", "PDF esportato con successo!")
             else:
                 QMessageBox.warning(self, "Errore", "Errore nell'esportazione del PDF")
+    
+    def load_template_layout(self, template_path, layout_name):
+        """Load layout from template file"""
+        try:
+            from qgis.core import QgsReadWriteContext
+            # Create new layout
+            layout = QgsPrintLayout(QgsProject.instance())
+            layout.setName(layout_name)
+            
+            # Load from template
+            with open(template_path, 'r') as f:
+                template_content = f.read()
+            
+            # Create a temporary XML document
+            from qgis.PyQt.QtXml import QDomDocument
+            doc = QDomDocument()
+            doc.setContent(template_content)
+            
+            # Read the layout
+            layout.readLayoutXml(doc.documentElement(), doc, QgsReadWriteContext())
+            
+            return layout
+            
+        except Exception as e:
+            QgsMessageLog.logMessage(f"Error loading template: {str(e)}", "ClipRasterLayout", Qgis.Critical)
+            return None
+    
+    def populate_template_layout(self, layout, raster_layer):
+        """Populate the template layout with data"""
+        try:
+            # Update main map on first page
+            for item in layout.items():
+                if isinstance(item, QgsLayoutItemMap):
+                    # Assuming the first map is the main map
+                    extent = raster_layer.extent()
+                    
+                    # Check if we need to include profile lines
+                    profile_layer = None
+                    for layer in QgsProject.instance().mapLayers().values():
+                        if layer.name() == "Profili DEM":
+                            profile_layer = layer
+                            # Expand extent to include all profiles
+                            profile_extent = layer.extent()
+                            if not profile_extent.isEmpty():
+                                extent.combineExtentWith(profile_extent)
+                            break
+                    
+                    # Add 10% buffer
+                    extent = extent.buffered(extent.width() * 0.1)
+                    item.setExtent(extent)
+                    item.refresh()
+                    break
+            
+            # Update text labels
+            for item in layout.items():
+                if isinstance(item, QgsLayoutItemLabel):
+                    text = item.text()
+                    # Replace placeholders
+                    if "[title]" in text:
+                        item.setText(text.replace("[title]", self.title_edit.text()))
+                    elif "[author]" in text:
+                        item.setText(text.replace("[author]", self.author_edit.text()))
+                    elif "[date]" in text:
+                        item.setText(text.replace("[date]", datetime.now().strftime("%d/%m/%Y")))
+                    elif "[scale]" in text:
+                        item.setText(text.replace("[scale]", self.scale_combo.currentText()))
+            
+            # Handle elevation profiles on page 2
+            self.populate_elevation_profiles(layout)
+            
+        except Exception as e:
+            QgsMessageLog.logMessage(f"Error populating template: {str(e)}", "ClipRasterLayout", Qgis.Critical)
+    
+    def populate_elevation_profiles(self, layout):
+        """Populate elevation profiles on page 2 of the template"""
+        try:
+            # Get all profile features
+            profile_features = []
+            for layer in QgsProject.instance().mapLayers().values():
+                if layer.name() == "Profili DEM" and isinstance(layer, QgsVectorLayer):
+                    for feature in layer.getFeatures():
+                        profile_features.append(feature)
+                    break
+            
+            # Limit to 6 profiles
+            profile_features = profile_features[:6]
+            
+            if not profile_features:
+                QgsMessageLog.logMessage("No profiles found to add to layout", "ClipRasterLayout", Qgis.Info)
+                return
+            
+            # Find elevation profile items on page 2
+            profile_items = []
+            for item in layout.items():
+                if HAS_ELEVATION_PROFILE and isinstance(item, QgsLayoutItemElevationProfile):
+                    # Check if it's on page 2
+                    if item.page() == 1:  # Page index starts at 0
+                        profile_items.append(item)
+            
+            QgsMessageLog.logMessage(f"Found {len(profile_items)} elevation profile items on page 2", "ClipRasterLayout", Qgis.Info)
+            
+            # Populate profiles
+            for i, (profile_item, profile_feature) in enumerate(zip(profile_items, profile_features)):
+                try:
+                    # Set the profile curve
+                    profile_item.setProfileCurve(profile_feature.geometry())
+                    
+                    # Find DEM layer
+                    dem_layer = None
+                    for layer in QgsProject.instance().mapLayers().values():
+                        if isinstance(layer, QgsRasterLayer) and layer.bandCount() == 1:
+                            if 'dem' in layer.name().lower() or 'dtm' in layer.name().lower():
+                                dem_layer = layer
+                                break
+                    
+                    if dem_layer:
+                        try:
+                            layers = profile_item.layers()
+                            layers.setLayerEnabled(dem_layer, True)
+                        except AttributeError:
+                            QgsMessageLog.logMessage(f"Could not set layer for profile {i+1}", "ClipRasterLayout", Qgis.Warning)
+                    
+                    # Update title if it's a label
+                    profile_name = profile_feature['name']
+                    # Look for associated label
+                    for label_item in layout.items():
+                        if isinstance(label_item, QgsLayoutItemLabel):
+                            if f"profile_{i+1}" in label_item.id().lower() or f"profilo_{i+1}" in label_item.id().lower():
+                                label_item.setText(f"Profilo {profile_name}")
+                                break
+                    
+                    QgsMessageLog.logMessage(f"Populated profile {i+1} with {profile_name}", "ClipRasterLayout", Qgis.Info)
+                    
+                except Exception as e:
+                    QgsMessageLog.logMessage(f"Error setting profile {i+1}: {str(e)}", "ClipRasterLayout", Qgis.Warning)
+            
+            # Hide unused profile items
+            for i in range(len(profile_features), len(profile_items)):
+                profile_items[i].setVisibility(False)
+                QgsMessageLog.logMessage(f"Hidden unused profile {i+1}", "ClipRasterLayout", Qgis.Info)
+                
+        except Exception as e:
+            QgsMessageLog.logMessage(f"Error populating elevation profiles: {str(e)}", "ClipRasterLayout", Qgis.Critical)
