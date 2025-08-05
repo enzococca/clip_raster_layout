@@ -469,6 +469,7 @@ class ProfileTabDockWidget(QDockWidget):
     def __init__(self, iface, parent=None):
         super().__init__("Profili DEM", parent)
         self.iface = iface
+        self.elevation_profiles = []  # Store references to elevation profile windows
         
         # Set object name for saving state
         self.setObjectName("ProfileTabDock")
@@ -495,9 +496,9 @@ class ProfileTabDockWidget(QDockWidget):
         button_layout.addWidget(elevation_btn)
         
         # Add create all profiles button
-        all_profiles_btn = QPushButton("Crea tutti i Profili Elevazione")
-        all_profiles_btn.setToolTip("Crea un profilo elevazione QGIS per ogni sezione tracciata")
-        all_profiles_btn.clicked.connect(self.create_all_elevation_profiles)
+        all_profiles_btn = QPushButton("Prepara Profili per Layout")
+        all_profiles_btn.setToolTip("Prepara i profili elevazione per l'uso nel layout")
+        all_profiles_btn.clicked.connect(self.prepare_profiles_for_layout)
         button_layout.addWidget(all_profiles_btn)
         
         layout.addLayout(button_layout)
@@ -569,10 +570,10 @@ class ProfileTabDockWidget(QDockWidget):
         except Exception as e:
             QgsMessageLog.logMessage(f"Error opening elevation profile: {str(e)}", "ClipRasterLayout", Qgis.Warning)
     
-    def create_all_elevation_profiles(self):
-        """Create elevation profiles for all sections in the profile layer"""
+    def prepare_profiles_for_layout(self):
+        """Prepare profiles for layout without creating multiple widgets"""
         try:
-            QgsMessageLog.logMessage("Starting creation of all elevation profiles...", "ClipRasterLayout", Qgis.Info)
+            QgsMessageLog.logMessage("Preparing profiles for layout...", "ClipRasterLayout", Qgis.Info)
             
             # Get the profile layer
             profile_layer = None
@@ -585,76 +586,27 @@ class ProfileTabDockWidget(QDockWidget):
                 QgsMessageLog.logMessage("Profile layer not found", "ClipRasterLayout", Qgis.Warning)
                 return
             
-            # Import necessary classes for creating multiple profile views
-            from qgis.PyQt.QtCore import QTimer
-            try:
-                from qgis.gui import QgsElevationProfileCanvas
-                from qgis.core import QgsCurve
-            except ImportError:
-                QgsMessageLog.logMessage("QGIS version does not support elevation profile API", "ClipRasterLayout", Qgis.Warning)
-                return
-            
-            # Get all profile features
-            profile_features = list(profile_layer.getFeatures())
-            
-            # Create a profile widget for each section
-            def create_next_profile(index=0):
-                if index >= len(profile_features):
-                    QgsMessageLog.logMessage(f"Created {len(profile_features)} elevation profiles", "ClipRasterLayout", Qgis.Info)
-                    return
-                
-                feature = profile_features[index]
+            # Store profile information for layout use
+            profile_count = 0
+            for feature in profile_layer.getFeatures():
                 profile_name = feature['name']
                 geometry = feature.geometry()
                 
-                try:
-                    # Create new elevation profile canvas
-                    profile_canvas = QgsElevationProfileCanvas()
-                    profile_canvas.setWindowTitle(f"Profilo Elevazione {profile_name}")
-                    
-                    # Set the profile curve from the geometry
-                    if geometry and geometry.type() == QgsWkbTypes.LineGeometry:
-                        # Convert geometry to curve
-                        curve = geometry.constGet()
-                        if curve:
-                            profile_canvas.setProfileCurve(curve)
-                        else:
-                            QgsMessageLog.logMessage(f"Could not get curve from geometry for {profile_name}", "ClipRasterLayout", Qgis.Warning)
-                        
-                        # Set CRS
-                        profile_canvas.setCrs(profile_layer.crs())
-                        
-                        # Add layers (DEM)
-                        dem_layers = []
-                        for layer in QgsProject.instance().mapLayers().values():
-                            if isinstance(layer, QgsRasterLayer) and layer.bandCount() == 1:
-                                if 'dem' in layer.name().lower() or 'dtm' in layer.name().lower():
-                                    dem_layers.append(layer)
-                        
-                        if dem_layers:
-                            profile_canvas.setLayers(dem_layers)
-                            QgsMessageLog.logMessage(f"Added {len(dem_layers)} DEM layers to profile {profile_name}", "ClipRasterLayout", Qgis.Info)
-                        
-                        # Show the profile
-                        profile_canvas.show()
-                        profile_canvas.refresh()
-                        
-                        # Store reference for layout
-                        QgsProject.instance().writeEntry("ClipRasterLayout", f"elevation_profile_{profile_name}", "created")
-                        
-                        QgsMessageLog.logMessage(f"Created elevation profile for {profile_name}", "ClipRasterLayout", Qgis.Info)
-                    
-                except Exception as e:
-                    QgsMessageLog.logMessage(f"Error creating profile for {profile_name}: {str(e)}", "ClipRasterLayout", Qgis.Warning)
+                if geometry and profile_name:
+                    # Store profile info in project
+                    QgsProject.instance().writeEntry("ClipRasterLayout", f"profile_ready_{profile_name}", "yes")
+                    QgsProject.instance().writeEntry("ClipRasterLayout", f"profile_geom_{profile_name}", geometry.asWkt())
+                    profile_count += 1
+                    QgsMessageLog.logMessage(f"Prepared profile {profile_name} for layout", "ClipRasterLayout", Qgis.Info)
+            
+            QgsMessageLog.logMessage(f"Prepared {profile_count} profiles for layout use", "ClipRasterLayout", Qgis.Info)
+            QMessageBox.information(None, "Profili Preparati", 
+                f"Preparati {profile_count} profili per il layout.\n\n"
+                "Ora puoi generare il layout e i profili saranno inclusi automaticamente.")
                 
-                # Create next profile after a delay
-                QTimer.singleShot(100, lambda: create_next_profile(index + 1))
-            
-            # Start creating profiles
-            QTimer.singleShot(500, lambda: create_next_profile(0))
-            
         except Exception as e:
-            QgsMessageLog.logMessage(f"Error in create_all_elevation_profiles: {str(e)}", "ClipRasterLayout", Qgis.Warning)
+            QgsMessageLog.logMessage(f"Error preparing profiles: {str(e)}", "ClipRasterLayout", Qgis.Warning)
+    
 
 class ProfileDockWidget(QDockWidget):
     def __init__(self, figure, name, iface, parent=None):
