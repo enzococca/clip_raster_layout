@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from qgis.PyQt.QtCore import Qt, QPointF, pyqtSignal, QVariant, QSizeF
 from qgis.PyQt.QtGui import QColor, QPen, QFont, QPolygonF, QTextDocument
-from qgis.PyQt.QtWidgets import QDialog, QVBoxLayout, QLabel, QComboBox, QPushButton, QFileDialog, QLineEdit, QHBoxLayout, QMessageBox, QDockWidget, QWidget
+from qgis.PyQt.QtWidgets import QDialog, QVBoxLayout, QLabel, QComboBox, QPushButton, QFileDialog, QLineEdit, QHBoxLayout, QMessageBox, QDockWidget, QWidget, QAction
 from qgis.core import (QgsPointXY, QgsGeometry, QgsFeature,
                       QgsVectorLayer, QgsProject, QgsWkbTypes, QgsField,
                       QgsFields, QgsCoordinateTransform, QgsRasterLayer,
@@ -376,47 +376,28 @@ class ProfileTool(QgsMapTool):
         self.iface.addDockWidget(Qt.LeftDockWidgetArea, dock)
         
     def create_qgis_elevation_profile(self, geometry, name):
-        """Create QGIS native elevation profile widget"""
+        """Open QGIS elevation profile tool with the current line"""
         try:
-            # Create elevation profile canvas
-            profile_canvas = QgsElevationProfileCanvas()
-            profile_canvas.setWindowTitle(f"Profilo Elevazione {name}")
+            # Open the elevation profile panel
+            self.iface.mainWindow().findChild(QAction, 'mActionShowElevationProfile').trigger()
             
-            # Set the profile curve
-            profile_canvas.setProfileCurve(geometry)
+            # Get the elevation profile dock widget
+            profile_dock = None
+            for dock in self.iface.mainWindow().findChildren(QDockWidget):
+                if 'elevation' in dock.windowTitle().lower() and 'profile' in dock.windowTitle().lower():
+                    profile_dock = dock
+                    break
             
-            # Set the CRS
-            profile_canvas.setCrs(self.canvas.mapSettings().destinationCrs())
-            
-            # Find and add DEM layer
-            if self.dem_layer:
-                # Get project's elevation properties
-                elevation_properties = QgsProject.instance().elevationProperties()
-                if elevation_properties:
-                    # Enable terrain (if DEM is set as terrain provider)
-                    profile_canvas.setLayers([self.dem_layer])
-            
-            # Set some visual properties
-            profile_canvas.setVisiblePlotRange(0, geometry.length(), 0, 0)
-            
-            # Show the profile canvas
-            profile_canvas.show()
-            profile_canvas.refresh()
-            
-            # Store reference
-            self.elevation_profiles.append({
-                'name': name,
-                'canvas': profile_canvas,
-                'geometry': geometry
-            })
-            
-            # Store in project custom properties for later use in layout
-            QgsProject.instance().writeEntry("ClipRasterLayout", f"elevation_profile_{name}", "created")
-            
-            QgsMessageLog.logMessage(f"Created QGIS elevation profile for {name}", "ClipRasterLayout", Qgis.Info)
-            
+            if profile_dock:
+                # The profile tool should automatically use the selected line
+                # Store geometry for layout use
+                QgsProject.instance().writeEntry("ClipRasterLayout", f"profile_geom_{name}", geometry.asWkt())
+                QgsMessageLog.logMessage(f"Opened elevation profile tool for {name}", "ClipRasterLayout", Qgis.Info)
+            else:
+                QgsMessageLog.logMessage("Could not find elevation profile dock", "ClipRasterLayout", Qgis.Warning)
+                
         except Exception as e:
-            QgsMessageLog.logMessage(f"Failed to create QGIS elevation profile: {str(e)}", "ClipRasterLayout", Qgis.Warning)
+            QgsMessageLog.logMessage(f"Failed to open QGIS elevation profile: {str(e)}", "ClipRasterLayout", Qgis.Warning)
         
 class DemSelectionDialog(QDialog):
     def __init__(self, iface, parent=None):

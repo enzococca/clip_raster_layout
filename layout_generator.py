@@ -5,7 +5,7 @@ from qgis.PyQt.QtGui import QFont, QColor, QPainter
 from qgis.PyQt.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
                                QComboBox, QPushButton, QCheckBox, QLineEdit,
                                QGroupBox, QFormLayout, QSpinBox, QMessageBox,
-                               QTextEdit, QFileDialog)
+                               QTextEdit, QFileDialog, QDockWidget)
 from qgis.core import (QgsProject, QgsLayout, QgsPrintLayout, QgsLayoutItemMap,
                       QgsLayoutItemLabel, QgsLayoutItemScaleBar, QgsLayoutItemPicture,
                       QgsLayoutItemLegend, QgsLayoutPoint, QgsLayoutSize,
@@ -840,26 +840,51 @@ class LayoutGenerator(QDialog):
             # Populate profiles
             for i, (profile_item, profile_feature) in enumerate(zip(profile_items, profile_features)):
                 try:
-                    # Set the profile curve
-                    profile_item.setProfileCurve(profile_feature.geometry())
+                    profile_name = profile_feature['name']
                     
-                    # Find DEM layer
-                    dem_layer = None
-                    for layer in QgsProject.instance().mapLayers().values():
-                        if isinstance(layer, QgsRasterLayer) and layer.bandCount() == 1:
-                            if 'dem' in layer.name().lower() or 'dtm' in layer.name().lower():
-                                dem_layer = layer
+                    # Try to copy from the elevation profile dock
+                    try:
+                        # Get the main elevation profile dock
+                        profile_dock = None
+                        for dock in self.iface.mainWindow().findChildren(QDockWidget):
+                            if 'elevation' in dock.windowTitle().lower() and 'profile' in dock.windowTitle().lower():
+                                profile_dock = dock
                                 break
-                    
-                    if dem_layer:
-                        try:
-                            layers = profile_item.layers()
-                            layers.setLayerEnabled(dem_layer, True)
-                        except AttributeError:
-                            QgsMessageLog.logMessage(f"Could not set layer for profile {i+1}", "ClipRasterLayout", Qgis.Warning)
+                        
+                        if profile_dock and profile_dock.isVisible():
+                            # Try to use copyProfileFromExisting if available
+                            if hasattr(profile_item, 'copyFromProfileWidget'):
+                                profile_item.copyFromProfileWidget(profile_dock)
+                                QgsMessageLog.logMessage(f"Copied profile {i+1} from elevation profile widget", "ClipRasterLayout", Qgis.Info)
+                            else:
+                                # Fallback: set the curve manually
+                                profile_item.setProfileCurve(profile_feature.geometry())
+                                QgsMessageLog.logMessage(f"Set profile curve manually for {i+1}", "ClipRasterLayout", Qgis.Info)
+                        else:
+                            # No profile dock, set curve manually
+                            profile_item.setProfileCurve(profile_feature.geometry())
+                            
+                            # Find DEM layer
+                            dem_layer = None
+                            for layer in QgsProject.instance().mapLayers().values():
+                                if isinstance(layer, QgsRasterLayer) and layer.bandCount() == 1:
+                                    if 'dem' in layer.name().lower() or 'dtm' in layer.name().lower():
+                                        dem_layer = layer
+                                        break
+                            
+                            if dem_layer:
+                                try:
+                                    layers = profile_item.layers()
+                                    layers.setLayerEnabled(dem_layer, True)
+                                except AttributeError:
+                                    QgsMessageLog.logMessage(f"Could not set layer for profile {i+1}", "ClipRasterLayout", Qgis.Warning)
+                                    
+                    except Exception as e:
+                        QgsMessageLog.logMessage(f"Error copying from profile dock: {str(e)}", "ClipRasterLayout", Qgis.Warning)
+                        # Fallback to setting curve
+                        profile_item.setProfileCurve(profile_feature.geometry())
                     
                     # Update title if it's a label
-                    profile_name = profile_feature['name']
                     # Look for associated label
                     for label_item in layout.items():
                         if isinstance(label_item, QgsLayoutItemLabel):
