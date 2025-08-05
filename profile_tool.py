@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from qgis.PyQt.QtCore import Qt, QPointF, pyqtSignal, QVariant, QSizeF
 from qgis.PyQt.QtGui import QColor, QPen, QFont, QPolygonF, QTextDocument
-from qgis.PyQt.QtWidgets import QDialog, QVBoxLayout, QLabel, QComboBox, QPushButton, QFileDialog, QLineEdit, QHBoxLayout, QMessageBox, QDockWidget, QWidget, QAction
+from qgis.PyQt.QtWidgets import QDialog, QVBoxLayout, QLabel, QComboBox, QPushButton, QFileDialog, QLineEdit, QHBoxLayout, QMessageBox, QDockWidget, QWidget, QAction, QTabWidget
 from qgis.core import (QgsPointXY, QgsGeometry, QgsFeature,
                       QgsVectorLayer, QgsProject, QgsWkbTypes, QgsField,
                       QgsFields, QgsCoordinateTransform, QgsRasterLayer,
@@ -38,6 +38,7 @@ class ProfileTool(QgsMapTool):
         self.labels = []
         self.current_feature_id = None
         self.elevation_profiles = []  # Store QGIS elevation profile widgets
+        self.profile_dock = None  # Single dock widget for all profiles
         
         # Create profile layer
         self.create_profile_layer()
@@ -166,9 +167,8 @@ class ProfileTool(QgsMapTool):
             # Extract and show profile (will update length_3d)
             self.extract_profile(self.start_point, end_point, letter_pair)
             
-            # Create QGIS elevation profile if available and less than 6 profiles
-            if HAS_ELEVATION_PROFILE and self.profile_count < 6:
-                self.create_qgis_elevation_profile(feature.geometry(), letter_pair)
+            # Store geometry for later use with elevation profile
+            QgsProject.instance().writeEntry("ClipRasterLayout", f"profile_geom_{letter_pair}", feature.geometry().asWkt())
             
             # Reset
             self.canvas.scene().removeItem(self.rubberBand)
@@ -363,25 +363,23 @@ class ProfileTool(QgsMapTool):
         # Store profile path in project custom properties
         QgsProject.instance().writeEntry("ClipRasterLayout", f"profile_{name}", profile_path)
         
-        # Try to create dock widget
+        # Create or update profile dock widget
         try:
-            # Create dock widget to show plot
-            dock = ProfileDockWidget(fig, name, self.iface)
+            if self.profile_dock is None:
+                # Create the main dock widget if it doesn't exist
+                self.profile_dock = ProfileTabDockWidget(self.iface)
+                self.iface.addDockWidget(Qt.LeftDockWidgetArea, self.profile_dock)
+                self.profile_dock.show()
+                QgsMessageLog.logMessage("Created main profile dock widget", "ClipRasterLayout", Qgis.Info)
             
-            # Add dock widget to left area
-            self.iface.addDockWidget(Qt.LeftDockWidgetArea, dock)
-            dock.show()
-            dock.raise_()
+            # Add new tab with the profile
+            canvas = FigureCanvas(fig)
+            self.profile_dock.add_profile_tab(canvas, name)
             
-            # Store reference
-            if not hasattr(self, 'dock_widgets'):
-                self.dock_widgets = []
-            self.dock_widgets.append(dock)
-            
-            QgsMessageLog.logMessage(f"Created profile dock widget for {name}", "ClipRasterLayout", Qgis.Info)
+            QgsMessageLog.logMessage(f"Added profile tab for {name}", "ClipRasterLayout", Qgis.Info)
             
         except Exception as e:
-            QgsMessageLog.logMessage(f"Failed to create dock widget: {str(e)}", "ClipRasterLayout", Qgis.Warning)
+            QgsMessageLog.logMessage(f"Failed to create/update dock widget: {str(e)}", "ClipRasterLayout", Qgis.Warning)
             # Fallback to dialog
             try:
                 dlg = ProfileDialog(fig, name)
@@ -390,30 +388,6 @@ class ProfileTool(QgsMapTool):
             except Exception as e2:
                 QgsMessageLog.logMessage(f"Failed to create profile dialog: {str(e2)}", "ClipRasterLayout", Qgis.Critical)
         
-    def create_qgis_elevation_profile(self, geometry, name):
-        """Open QGIS elevation profile tool with the current line"""
-        try:
-            # Try different ways to open the elevation profile
-            # Method 1: Direct action
-            action = self.iface.mainWindow().findChild(QAction, 'mActionShowElevationProfile')
-            if action:
-                action.trigger()
-                QgsMessageLog.logMessage("Triggered elevation profile action", "ClipRasterLayout", Qgis.Info)
-            else:
-                # Method 2: Through menu
-                for action in self.iface.mainWindow().menuBar().actions():
-                    if action.menu():
-                        for subAction in action.menu().actions():
-                            if 'elevation' in subAction.text().lower() and 'profile' in subAction.text().lower():
-                                subAction.trigger()
-                                QgsMessageLog.logMessage("Triggered elevation profile through menu", "ClipRasterLayout", Qgis.Info)
-                                break
-            
-            # Store geometry for layout use
-            QgsProject.instance().writeEntry("ClipRasterLayout", f"profile_geom_{name}", geometry.asWkt())
-            
-        except Exception as e:
-            QgsMessageLog.logMessage(f"Failed to open QGIS elevation profile: {str(e)}", "ClipRasterLayout", Qgis.Warning)
         
 class DemSelectionDialog(QDialog):
     def __init__(self, iface, parent=None):
@@ -490,6 +464,97 @@ class ProfileSaveDialog(QDialog):
             super().accept()
         else:
             QMessageBox.warning(self, "Attenzione", "Seleziona una cartella")
+
+class ProfileTabDockWidget(QDockWidget):
+    def __init__(self, iface, parent=None):
+        super().__init__("Profili DEM", parent)
+        self.iface = iface
+        
+        # Set object name for saving state
+        self.setObjectName("ProfileTabDock")
+        
+        # Create tab widget
+        self.tab_widget = QTabWidget()
+        
+        # Create main widget
+        widget = QWidget()
+        layout = QVBoxLayout()
+        layout.addWidget(self.tab_widget)
+        
+        # Add button bar
+        button_layout = QHBoxLayout()
+        
+        # Add close all button
+        close_all_btn = QPushButton("Chiudi tutti")
+        close_all_btn.clicked.connect(self.close_all_profiles)
+        button_layout.addWidget(close_all_btn)
+        
+        # Add elevation profile button
+        elevation_btn = QPushButton("Apri Profilo Elevazione QGIS")
+        elevation_btn.clicked.connect(self.open_elevation_profile)
+        button_layout.addWidget(elevation_btn)
+        
+        layout.addLayout(button_layout)
+        
+        widget.setLayout(layout)
+        self.setWidget(widget)
+        
+        # Set size
+        self.setMinimumWidth(600)
+        self.setMinimumHeight(400)
+        
+        # Allow docking on all sides
+        self.setAllowedAreas(Qt.AllDockWidgetAreas)
+        
+    def add_profile_tab(self, canvas, name):
+        """Add a new profile tab"""
+        # Create widget for the tab
+        tab_widget = QWidget()
+        layout = QVBoxLayout()
+        layout.addWidget(canvas)
+        tab_widget.setLayout(layout)
+        
+        # Add tab
+        self.tab_widget.addTab(tab_widget, name)
+        
+        # Switch to new tab
+        self.tab_widget.setCurrentIndex(self.tab_widget.count() - 1)
+        
+    def close_all_profiles(self):
+        """Close all profile tabs"""
+        self.tab_widget.clear()
+        
+    def open_elevation_profile(self):
+        """Try to open QGIS elevation profile panel"""
+        try:
+            # Try to find and trigger the elevation profile action
+            actions = self.iface.mainWindow().findChildren(QAction)
+            for action in actions:
+                if 'elevation' in action.text().lower() and 'profile' in action.text().lower():
+                    action.trigger()
+                    QgsMessageLog.logMessage("Triggered elevation profile action", "ClipRasterLayout", Qgis.Info)
+                    return
+                    
+            # Alternative: try through View menu
+            view_menu = None
+            for action in self.iface.mainWindow().menuBar().actions():
+                if action.text().lower() == 'view' or 'vista' in action.text().lower():
+                    view_menu = action.menu()
+                    break
+                    
+            if view_menu:
+                for action in view_menu.actions():
+                    if action.menu():  # Panels submenu
+                        for subaction in action.menu().actions():
+                            if 'elevation' in subaction.text().lower() and 'profile' in subaction.text().lower():
+                                subaction.trigger()
+                                QgsMessageLog.logMessage("Triggered elevation profile through View menu", "ClipRasterLayout", Qgis.Info)
+                                return
+                                
+            QgsMessageLog.logMessage("Could not find elevation profile action", "ClipRasterLayout", Qgis.Warning)
+                                
+        except Exception as e:
+            QgsMessageLog.logMessage(f"Error opening elevation profile: {str(e)}", "ClipRasterLayout", Qgis.Warning)
 
 class ProfileDockWidget(QDockWidget):
     def __init__(self, figure, name, iface, parent=None):
