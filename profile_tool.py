@@ -7,7 +7,7 @@ from qgis.core import (QgsPointXY, QgsGeometry, QgsFeature,
                       QgsFields, QgsCoordinateTransform, QgsRasterLayer,
                       QgsLineString, QgsPoint, QgsRaster, QgsRasterIdentifyResult,
                       QgsSymbol, QgsSimpleLineSymbolLayer, QgsMarkerSymbol,
-                      QgsSimpleMarkerSymbolLayer, QgsTextAnnotation)
+                      QgsSimpleMarkerSymbolLayer, QgsTextAnnotation, QgsMessageLog, Qgis)
 from qgis.gui import QgsMapToolEmitPoint, QgsRubberBand, QgsMapCanvas, QgsMapTool, QgsMapCanvasAnnotationItem
 import numpy as np
 import math
@@ -268,7 +268,7 @@ class ProfileTool(QgsMapTool):
                         # Update length_3d field (index 3) - ensure it's a Python float
                         self.profile_layer.changeAttributeValue(feature.id(), 3, float(length_3d))
                         self.profile_layer.commitChanges()
-                        print(f"Updated profile {feature['name']} with 3D length: {length_3d:.2f}m")
+                        QgsMessageLog.logMessage(f"Updated profile {feature['name']} with 3D length: {length_3d:.2f}m", "ClipRasterLayout", Qgis.Info)
                         break
             
             self.create_profile_plot(valid_distances, elevations, name)
@@ -339,9 +339,9 @@ class ProfileTool(QgsMapTool):
         profile_path = os.path.join(save_dir, f"profile_{name}.png")
         fig.savefig(profile_path, dpi=300, bbox_inches='tight')
         
-        # Debug: print where the file was saved
-        print(f"Profile saved to: {profile_path}")
-        print(f"File exists: {os.path.exists(profile_path)}")
+        # Debug: log where the file was saved
+        QgsMessageLog.logMessage(f"Profile saved to: {profile_path}", "ClipRasterLayout", Qgis.Info)
+        QgsMessageLog.logMessage(f"File exists: {os.path.exists(profile_path)}", "ClipRasterLayout", Qgis.Info)
         
         # Create dialog to show plot
         dlg = ProfileDialog(fig, name)

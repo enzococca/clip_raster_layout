@@ -17,7 +17,7 @@ from qgis.core import (QgsProject, QgsLayout, QgsPrintLayout, QgsLayoutItemMap,
                       QgsLayoutFrame, QgsLayoutMultiFrame, QgsRectangle,
                       QgsCoordinateReferenceSystem, QgsCoordinateTransform,
                       QgsLayoutRenderContext, QgsLayoutItem, QgsLayoutItemMapOverview,
-                      QgsLayoutItemHtml, QgsSymbol, QgsScaleBarSettings)
+                      QgsLayoutItemHtml, QgsSymbol, QgsScaleBarSettings, QgsMessageLog, Qgis)
 
 # Try to import elevation profile (QGIS 3.26+)
 try:
@@ -393,13 +393,13 @@ class LayoutGenerator(QDialog):
             if HAS_ELEVATION_PROFILE:
                 try:
                     self.add_native_elevation_profile(layout, size)
-                    print("Using native QGIS elevation profile")
+                    QgsMessageLog.logMessage("Using native QGIS elevation profile", "ClipRasterLayout", Qgis.Info)
                 except Exception as e:
-                    print(f"Native profile failed: {e}, using custom matplotlib method")
+                    QgsMessageLog.logMessage(f"Native profile failed: {e}, using custom matplotlib method", "ClipRasterLayout", Qgis.Warning)
                     self.add_profile_graph(layout, size)
             else:
                 # Use custom method for older QGIS versions
-                print("QGIS elevation profile not available, using custom matplotlib method")
+                QgsMessageLog.logMessage("QGIS elevation profile not available, using custom matplotlib method", "ClipRasterLayout", Qgis.Info)
                 self.add_profile_graph(layout, size)
             
         # Metadata table
@@ -481,7 +481,7 @@ class LayoutGenerator(QDialog):
                         layers.setProfileLayerSettings(dem_layer.id(), layer_settings)
                 except:
                     # Fallback - just add the layer
-                    print(f"Could not configure elevation profile layers, using default settings")
+                    QgsMessageLog.logMessage("Could not configure elevation profile layers, using default settings", "ClipRasterLayout", Qgis.Warning)
         
         # Set profile title
         profile_name = profile_feature['name']
@@ -494,13 +494,13 @@ class LayoutGenerator(QDialog):
         # Add to layout
         layout.addLayoutItem(profile_item)
         
-        print(f"Native elevation profile added for {profile_name}")
+        QgsMessageLog.logMessage(f"Native elevation profile added for {profile_name}", "ClipRasterLayout", Qgis.Info)
         
     def add_profile_graph(self, layout, page_size):
         """Add the selected profile graph to the layout"""
         profile_feature = self.profile_combo.currentData()
         if not profile_feature:
-            print("No profile feature selected")
+            QgsMessageLog.logMessage("No profile feature selected", "ClipRasterLayout", Qgis.Warning)
             return
             
         # Get clean profile name (without path if present)
@@ -508,7 +508,7 @@ class LayoutGenerator(QDialog):
         if '|' in profile_name:
             profile_name = profile_name.split('|')[0]
         
-        print(f"Adding profile: {profile_name}")
+        QgsMessageLog.logMessage(f"Adding profile: {profile_name}", "ClipRasterLayout", Qgis.Info)
         
         # Import at the beginning
         import os
@@ -528,16 +528,16 @@ class LayoutGenerator(QDialog):
                 profile_path = os.path.join(temp_dir, f"profile_{profile_name}.png")
         
         # Debug: check if file exists
-        print(f"Looking for profile at: {profile_path}")
-        print(f"File exists: {os.path.exists(profile_path)}")
+        QgsMessageLog.logMessage(f"Looking for profile at: {profile_path}", "ClipRasterLayout", Qgis.Info)
+        QgsMessageLog.logMessage(f"File exists: {os.path.exists(profile_path)}", "ClipRasterLayout", Qgis.Info)
         
         # List all profile files in directory where we're looking
         profile_dir = os.path.dirname(profile_path)
         if os.path.exists(profile_dir):
-            print(f"Available profile files in {profile_dir}:")
+            QgsMessageLog.logMessage(f"Available profile files in {profile_dir}:", "ClipRasterLayout", Qgis.Info)
             for file in os.listdir(profile_dir):
                 if file.startswith("profile_") and file.endswith(".png"):
-                    print(f"  - {file}")
+                    QgsMessageLog.logMessage(f"  - {file}", "ClipRasterLayout", Qgis.Info)
         
         if os.path.exists(profile_path):
             # Add image to layout
@@ -560,9 +560,9 @@ class LayoutGenerator(QDialog):
             profile_pic.setResizeMode(QgsLayoutItemPicture.Zoom)
             
             layout.addLayoutItem(profile_pic)
-            print(f"Profile image added to layout")
+            QgsMessageLog.logMessage("Profile image added to layout", "ClipRasterLayout", Qgis.Info)
         else:
-            print(f"Profile image not found at {profile_path}")
+            QgsMessageLog.logMessage(f"Profile image not found at {profile_path}", "ClipRasterLayout", Qgis.Warning)
             QMessageBox.warning(None, "Attenzione", 
                 f"Immagine del profilo non trovata.\n"
                 f"Assicurati di aver generato il profilo '{profile_name}' prima di creare il layout.")
