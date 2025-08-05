@@ -21,7 +21,7 @@ from qgis.core import (QgsProject, QgsLayout, QgsPrintLayout, QgsLayoutItemMap,
 
 # Try to import elevation profile (QGIS 3.26+)
 try:
-    from qgis.core import QgsLayoutItemElevationProfile, QgsProfileRequest
+    from qgis.core import QgsLayoutItemElevationProfile, QgsProfileRequest, QgsElevationProfileLayerSettings
     HAS_ELEVATION_PROFILE = True
 except ImportError:
     HAS_ELEVATION_PROFILE = False
@@ -393,11 +393,13 @@ class LayoutGenerator(QDialog):
             if HAS_ELEVATION_PROFILE:
                 try:
                     self.add_native_elevation_profile(layout, size)
+                    print("Using native QGIS elevation profile")
                 except Exception as e:
-                    print(f"Native profile failed: {e}, using custom method")
+                    print(f"Native profile failed: {e}, using custom matplotlib method")
                     self.add_profile_graph(layout, size)
             else:
                 # Use custom method for older QGIS versions
+                print("QGIS elevation profile not available, using custom matplotlib method")
                 self.add_profile_graph(layout, size)
             
         # Metadata table
@@ -430,9 +432,69 @@ class LayoutGenerator(QDialog):
         if not profile_feature:
             return
             
-        # For now, raise exception to force using the custom method
-        # The native profile requires more complex setup
-        raise Exception("Native profile not fully implemented, using custom method")
+        # Get the profile line geometry
+        profile_geom = profile_feature.geometry()
+        
+        # Create elevation profile item
+        profile_item = QgsLayoutItemElevationProfile(layout)
+        
+        # Set size and position
+        if self.paper_combo.currentText() == "A3 Orizzontale":
+            profile_item.attemptMove(QgsLayoutPoint(3.99, 168.75, QgsUnitTypes.LayoutMillimeters))
+            profile_item.attemptResize(QgsLayoutSize(287.19, 38.87, QgsUnitTypes.LayoutMillimeters))
+        else:
+            profile_item.attemptMove(QgsLayoutPoint(10, page_size[1] - 50, QgsUnitTypes.LayoutMillimeters))
+            profile_item.attemptResize(QgsLayoutSize(page_size[0] - 20, 40, QgsUnitTypes.LayoutMillimeters))
+        
+        # Find DEM layer
+        dem_layer = None
+        for layer in QgsProject.instance().mapLayers().values():
+            if isinstance(layer, QgsRasterLayer) and layer.bandCount() == 1:
+                # Check if it's a DEM by looking at the name or checking if it has elevation data
+                if 'dem' in layer.name().lower() or 'dtm' in layer.name().lower() or 'elevation' in layer.name().lower():
+                    dem_layer = layer
+                    break
+        
+        if not dem_layer:
+            # If no DEM found by name, use the first single-band raster
+            for layer in QgsProject.instance().mapLayers().values():
+                if isinstance(layer, QgsRasterLayer) and layer.bandCount() == 1:
+                    dem_layer = layer
+                    break
+        
+        # Set the profile curve from the line geometry
+        profile_item.setProfileCurve(profile_geom)
+        
+        # Configure layers for the profile
+        if dem_layer:
+            try:
+                # Try the newer API first (QGIS 3.30+)
+                layers = profile_item.layers()
+                layers.setLayerEnabled(dem_layer, True)
+            except AttributeError:
+                try:
+                    # Try older API
+                    layers = profile_item.profileLayers()
+                    layer_settings = layers.profileLayerSettings(dem_layer.id())
+                    if layer_settings:
+                        layer_settings.setEnabled(True)
+                        layers.setProfileLayerSettings(dem_layer.id(), layer_settings)
+                except:
+                    # Fallback - just add the layer
+                    print(f"Could not configure elevation profile layers, using default settings")
+        
+        # Set profile title
+        profile_name = profile_feature['name']
+        profile_item.setPlotArea(QRectF(0.1, 0.1, 0.8, 0.8))
+        
+        # Add frame
+        profile_item.setFrameEnabled(True)
+        profile_item.setFrameStrokeWidth(QgsLayoutMeasurement(0.5, QgsUnitTypes.LayoutMillimeters))
+        
+        # Add to layout
+        layout.addLayoutItem(profile_item)
+        
+        print(f"Native elevation profile added for {profile_name}")
         
     def add_profile_graph(self, layout, page_size):
         """Add the selected profile graph to the layout"""
