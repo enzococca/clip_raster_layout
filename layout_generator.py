@@ -216,13 +216,18 @@ class LayoutGenerator(QDialog):
             if os.path.exists(template_path):
                 layout = self.load_template_layout(template_path, layout_name)
                 if layout:
-                    self.populate_template_layout(layout, raster_layer)
-                    # Add layout to project
+                    # Add layout to project FIRST
                     project.layoutManager().addLayout(layout)
+                    
+                    # Then populate it
+                    self.populate_template_layout(layout, raster_layer)
+                    
                     self.current_layout = layout
                     self.export_button.setEnabled(True)
+                    
                     # Open layout designer
                     self.iface.openLayoutDesigner(layout)
+                    
                     QMessageBox.information(self, "Successo", "Layout generato con successo dal template!")
                     return
                 else:
@@ -746,11 +751,20 @@ class LayoutGenerator(QDialog):
             
             # Find elevation profile items on page 2
             profile_items = []
+            
+            # Since the template might not have native elevation profiles,
+            # we should check for picture items that might be placeholders
             for item in layout.items():
                 if HAS_ELEVATION_PROFILE and isinstance(item, QgsLayoutItemElevationProfile):
                     # Check if it's on page 2
                     if item.page() == 1:  # Page index starts at 0
                         profile_items.append(item)
+                        
+            # If no elevation profile items found, look for picture placeholders
+            if not profile_items:
+                QgsMessageLog.logMessage("No elevation profile items found, looking for picture placeholders", "ClipRasterLayout", Qgis.Info)
+                # For now, just use the matplotlib profiles as before
+                return
             
             QgsMessageLog.logMessage(f"Found {len(profile_items)} elevation profile items on page 2", "ClipRasterLayout", Qgis.Info)
             
