@@ -719,8 +719,10 @@ class LayoutGenerator(QDialog):
         """Populate the template layout with data"""
         try:
             # Update main map on first page
+            main_map = None
             for item in layout.items():
-                if isinstance(item, QgsLayoutItemMap):
+                if isinstance(item, QgsLayoutItemMap) and item.page() == 0:
+                    main_map = item
                     # Assuming the first map is the main map
                     extent = raster_layer.extent()
                     
@@ -740,6 +742,10 @@ class LayoutGenerator(QDialog):
                     item.setExtent(extent)
                     item.refresh()
                     break
+            
+            # Add labels for section endpoints
+            if profile_layer and main_map:
+                self.add_section_labels(layout, profile_layer, main_map)
             
             # Update text labels
             for item in layout.items():
@@ -804,6 +810,9 @@ class LayoutGenerator(QDialog):
                                 
                 if picture_items:
                     QgsMessageLog.logMessage(f"Found {len(picture_items)} picture items for profiles on page 2", "ClipRasterLayout", Qgis.Info)
+                    # Sort picture items by their position on page (top to bottom, left to right)
+                    picture_items.sort(key=lambda x: (x.positionWithUnits().y(), x.positionWithUnits().x()))
+                    
                     # Populate picture items with matplotlib profiles
                     for i, (pic_item, profile_feature) in enumerate(zip(picture_items[:len(profile_features)], profile_features)):
                         profile_name = profile_feature['name']
@@ -826,8 +835,12 @@ class LayoutGenerator(QDialog):
                             pic_item.setPicturePath(profile_path)
                             pic_item.setVisibility(True)
                             QgsMessageLog.logMessage(f"Set profile image {i+1} to {profile_path}", "ClipRasterLayout", Qgis.Info)
+                            
+                            # Add title label above the profile
+                            self.add_profile_title(layout, pic_item, f"Profilo {profile_name}")
                         else:
                             QgsMessageLog.logMessage(f"Profile image not found: {profile_path}", "ClipRasterLayout", Qgis.Warning)
+                            pic_item.setVisibility(False)
                     
                     # Hide unused picture items
                     for i in range(len(profile_features), len(picture_items)):
@@ -904,3 +917,91 @@ class LayoutGenerator(QDialog):
                 
         except Exception as e:
             QgsMessageLog.logMessage(f"Error populating elevation profiles: {str(e)}", "ClipRasterLayout", Qgis.Critical)
+    
+    def add_section_labels(self, layout, profile_layer, map_item):
+        """Add labels at the endpoints of sections on the map"""
+        try:
+            for feature in profile_layer.getFeatures():
+                profile_name = feature['name']
+                if not profile_name or '-' not in profile_name:
+                    continue
+                
+                # Get the start and end letters
+                start_letter, end_letter = profile_name.split('-')
+                geometry = feature.geometry()
+                
+                if geometry.type() == QgsWkbTypes.LineGeometry:
+                    # Get the line points
+                    line = geometry.asPolyline()
+                    if len(line) >= 2:
+                        start_point = line[0]
+                        end_point = line[-1]
+                        
+                        # Convert map coordinates to layout coordinates
+                        start_layout = map_item.mapToItemCoords(QPointF(start_point.x(), start_point.y()))
+                        end_layout = map_item.mapToItemCoords(QPointF(end_point.x(), end_point.y()))
+                        
+                        # Create start label
+                        start_label = QgsLayoutItemLabel(layout)
+                        start_label.setText(f"→ {start_letter}")
+                        start_label.setFont(QFont("Arial", 10, QFont.Bold))
+                        
+                        # Position relative to map item
+                        start_pos = QgsLayoutPoint(
+                            map_item.positionWithUnits().x() + start_layout.x() - 5,
+                            map_item.positionWithUnits().y() + start_layout.y() - 5,
+                            QgsUnitTypes.LayoutMillimeters
+                        )
+                        start_label.attemptMove(start_pos)
+                        start_label.attemptResize(QgsLayoutSize(10, 10, QgsUnitTypes.LayoutMillimeters))
+                        layout.addLayoutItem(start_label)
+                        
+                        # Create end label
+                        end_label = QgsLayoutItemLabel(layout)
+                        end_label.setText(f"{end_letter} ←")
+                        end_label.setFont(QFont("Arial", 10, QFont.Bold))
+                        
+                        # Position relative to map item
+                        end_pos = QgsLayoutPoint(
+                            map_item.positionWithUnits().x() + end_layout.x() - 5,
+                            map_item.positionWithUnits().y() + end_layout.y() - 5,
+                            QgsUnitTypes.LayoutMillimeters
+                        )
+                        end_label.attemptMove(end_pos)
+                        end_label.attemptResize(QgsLayoutSize(10, 10, QgsUnitTypes.LayoutMillimeters))
+                        layout.addLayoutItem(end_label)
+                        
+                        QgsMessageLog.logMessage(f"Added labels for section {profile_name}", "ClipRasterLayout", Qgis.Info)
+                        
+        except Exception as e:
+            QgsMessageLog.logMessage(f"Error adding section labels: {str(e)}", "ClipRasterLayout", Qgis.Warning)
+    
+    def add_profile_title(self, layout, profile_item, title):
+        """Add title label above a profile picture item"""
+        try:
+            # Create title label
+            title_label = QgsLayoutItemLabel(layout)
+            title_label.setText(title)
+            title_label.setFont(QFont("Arial", 12, QFont.Bold))
+            title_label.setHAlign(Qt.AlignHCenter)
+            
+            # Position above the profile item
+            profile_pos = profile_item.positionWithUnits()
+            title_pos = QgsLayoutPoint(
+                profile_pos.x(),
+                profile_pos.y() - 8,  # 8mm above the profile
+                QgsUnitTypes.LayoutMillimeters
+            )
+            
+            title_label.attemptMove(title_pos)
+            title_label.attemptResize(QgsLayoutSize(
+                profile_item.sizeWithUnits().width(),
+                8,
+                QgsUnitTypes.LayoutMillimeters
+            ))
+            
+            layout.addLayoutItem(title_label)
+            QgsMessageLog.logMessage(f"Added title '{title}' to profile", "ClipRasterLayout", Qgis.Info)
+            
+        except Exception as e:
+            QgsMessageLog.logMessage(f"Error adding profile title: {str(e)}", "ClipRasterLayout", Qgis.Warning)
