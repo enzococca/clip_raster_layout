@@ -216,34 +216,18 @@ class LayoutGenerator(QDialog):
             if os.path.exists(template_path):
                 layout = self.load_template_layout(template_path, layout_name)
                 if layout:
-                    # Store reference immediately
+                    # Layout is already in the manager from load_template_layout
                     self.current_layout = layout
                     
-                    # Add layout to project FIRST
-                    success = project.layoutManager().addLayout(layout)
-                    if not success:
-                        QgsMessageLog.logMessage("Failed to add layout to project", "ClipRasterLayout", Qgis.Critical)
-                        return
-                    
-                    # Verify layout is still valid
-                    if layout.name() != layout_name:
-                        QgsMessageLog.logMessage("Layout name changed unexpectedly", "ClipRasterLayout", Qgis.Warning)
-                    
-                    # Then populate it
+                    # Populate it with data
                     self.populate_template_layout(layout, raster_layer)
                     
                     self.export_button.setEnabled(True)
                     
-                    # Get fresh reference from project manager
-                    layout_from_manager = project.layoutManager().layoutByName(layout_name)
-                    if layout_from_manager:
-                        # Open layout designer with fresh reference
-                        self.iface.openLayoutDesigner(layout_from_manager)
-                        QMessageBox.information(self, "Successo", "Layout generato con successo dal template!")
-                    else:
-                        QgsMessageLog.logMessage("Could not find layout in manager after adding", "ClipRasterLayout", Qgis.Critical)
-                        QMessageBox.warning(self, "Errore", "Layout creato ma non trovato nel manager")
+                    # Open layout designer
+                    self.iface.openLayoutDesigner(layout)
                     
+                    QMessageBox.information(self, "Successo", "Layout generato con successo dal template!")
                     return
                 else:
                     QgsMessageLog.logMessage("Failed to load template, creating new layout", "ClipRasterLayout", Qgis.Warning)
@@ -677,40 +661,51 @@ class LayoutGenerator(QDialog):
     def load_template_layout(self, template_path, layout_name):
         """Load layout from template file"""
         try:
+            # Use QGIS built-in method to duplicate from template
+            project = QgsProject.instance()
+            manager = project.layoutManager()
+            
+            # First, try to create an empty layout and add it
+            layout = QgsPrintLayout(project)
+            layout.initializeDefaults()
+            layout.setName(layout_name)
+            
+            # Add the empty layout first
+            if not manager.addLayout(layout):
+                QgsMessageLog.logMessage("Could not add empty layout", "ClipRasterLayout", Qgis.Critical)
+                return None
+            
+            # Now load the template content into the existing layout
             from qgis.core import QgsReadWriteContext
+            from qgis.PyQt.QtXml import QDomDocument
             
             # Read template content
             with open(template_path, 'r', encoding='utf-8') as f:
                 template_content = f.read()
             
-            # Create a temporary XML document
-            from qgis.PyQt.QtXml import QDomDocument
             doc = QDomDocument()
-            
-            # Load content into document
-            success = doc.setContent(template_content)
-            if not success:
+            if not doc.setContent(template_content):
                 QgsMessageLog.logMessage("Failed to parse template XML", "ClipRasterLayout", Qgis.Critical)
+                manager.removeLayout(layout)
                 return None
             
-            # Create new layout through project
-            project = QgsProject.instance()
-            layout = QgsPrintLayout(project)
-            layout.setName(layout_name)
+            # Get the layout back from manager to ensure we have valid reference
+            layout = manager.layoutByName(layout_name)
+            if not layout:
+                QgsMessageLog.logMessage("Could not retrieve layout from manager", "ClipRasterLayout", Qgis.Critical)
+                return None
             
-            # Important: Initialize the layout before loading XML
-            layout.initializeDefaults()
-            
-            # Create read/write context
+            # Clear the layout and load template
+            layout.clear()
             context = QgsReadWriteContext()
             
-            # Read the layout from XML
-            success = layout.readLayoutXml(doc.documentElement(), doc, context)
-            if not success:
-                QgsMessageLog.logMessage("Failed to read layout from template", "ClipRasterLayout", Qgis.Critical)
+            # Load the template XML into the layout
+            if not layout.readLayoutXml(doc.documentElement(), doc, context):
+                QgsMessageLog.logMessage("Failed to read layout XML", "ClipRasterLayout", Qgis.Critical)
+                manager.removeLayout(layout)
                 return None
-                
-            QgsMessageLog.logMessage(f"Successfully loaded template layout: {layout_name}", "ClipRasterLayout", Qgis.Info)
+            
+            QgsMessageLog.logMessage(f"Successfully loaded template into layout: {layout_name}", "ClipRasterLayout", Qgis.Info)
             
             return layout
             
