@@ -563,11 +563,7 @@ class ProfileTabDockWidget(QDockWidget):
                                     QgsMessageLog.logMessage("Triggered elevation profile through View menu", "ClipRasterLayout", Qgis.Info)
                                     break
             
-            if opened:
-                # Now create elevation profiles for all sections
-                QgsMessageLog.logMessage("Creating elevation profiles for all sections...", "ClipRasterLayout", Qgis.Info)
-                self.create_all_elevation_profiles()
-            else:
+            if not opened:
                 QgsMessageLog.logMessage("Could not find elevation profile action", "ClipRasterLayout", Qgis.Warning)
                                 
         except Exception as e:
@@ -576,8 +572,7 @@ class ProfileTabDockWidget(QDockWidget):
     def create_all_elevation_profiles(self):
         """Create elevation profiles for all sections in the profile layer"""
         try:
-            # First ensure elevation profile panel is open
-            self.open_elevation_profile()
+            QgsMessageLog.logMessage("Starting creation of all elevation profiles...", "ClipRasterLayout", Qgis.Info)
             
             # Get the profile layer
             profile_layer = None
