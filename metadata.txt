@@ -4,15 +4,15 @@ qgisMinimumVersion=3.0
 description=Plugin per clipping raster in batch, profili DEM e layout professionale
 version=0.1
 author=Enzo
-email=enzo@example.com
+email=enzo.ccc@gmail.com
 
 about=Questo plugin fornisce tre funzionalità principali:
     1. Clipping raster in batch usando un poligono
     2. Creazione profili topografici da DEM con sezioni tratteggiate
     3. Generazione layout professionali con tutti i metadati necessari
 
-tracker=http://bugs
-repository=http://repo
+tracker=https://github.com/enzo-ccc/clip-raster-layout/issues
+repository=https://github.com/enzo-ccc/clip-raster-layout
 icon=icon.png
 
 experimental=False

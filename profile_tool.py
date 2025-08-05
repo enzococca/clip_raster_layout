@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from qgis.PyQt.QtCore import Qt, QPointF, pyqtSignal, QVariant, QSizeF
 from qgis.PyQt.QtGui import QColor, QPen, QFont, QPolygonF, QTextDocument
-from qgis.PyQt.QtWidgets import QDialog, QVBoxLayout, QLabel, QComboBox, QPushButton, QFileDialog, QLineEdit, QHBoxLayout, QMessageBox
+from qgis.PyQt.QtWidgets import QDialog, QVBoxLayout, QLabel, QComboBox, QPushButton, QFileDialog, QLineEdit, QHBoxLayout, QMessageBox, QDockWidget, QWidget
 from qgis.core import (QgsPointXY, QgsGeometry, QgsFeature,
                       QgsVectorLayer, QgsProject, QgsWkbTypes, QgsField,
                       QgsFields, QgsCoordinateTransform, QgsRasterLayer,
@@ -356,8 +356,8 @@ class ProfileTool(QgsMapTool):
         QgsMessageLog.logMessage(f"Profile saved to: {profile_path}", "ClipRasterLayout", Qgis.Info)
         QgsMessageLog.logMessage(f"File exists: {os.path.exists(profile_path)}", "ClipRasterLayout", Qgis.Info)
         
-        # Create dialog to show plot
-        dlg = ProfileDialog(fig, name)
+        # Create dock widget to show plot
+        dock = ProfileDockWidget(fig, name, self.iface)
         profile_data = {'name': name, 'figure': fig, 'distances': distances, 'elevations': elevations, 'image_path': profile_path}
         self.profiles.append(profile_data)
         
@@ -372,7 +372,8 @@ class ProfileTool(QgsMapTool):
             # Store profile path in a custom property of the layer
             QgsProject.instance().writeEntry("ClipRasterLayout", f"profile_{name}", profile_path)
         
-        dlg.exec_()
+        # Add dock widget to left area
+        self.iface.addDockWidget(Qt.LeftDockWidgetArea, dock)
         
     def create_qgis_elevation_profile(self, geometry, name):
         """Create QGIS native elevation profile widget"""
@@ -493,13 +494,28 @@ class ProfileSaveDialog(QDialog):
         else:
             QMessageBox.warning(self, "Attenzione", "Seleziona una cartella")
 
-class ProfileDialog(QDialog):
-    def __init__(self, figure, name, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle(f"Profilo {name}")
-        self.setMinimumSize(800, 600)
+class ProfileDockWidget(QDockWidget):
+    def __init__(self, figure, name, iface, parent=None):
+        super().__init__(f"Profilo {name}", parent)
+        self.iface = iface
+        self.name = name
         
+        # Create widget to hold the plot
+        widget = QWidget()
         layout = QVBoxLayout()
+        
+        # Add matplotlib canvas
         canvas = FigureCanvas(figure)
         layout.addWidget(canvas)
-        self.setLayout(layout)
+        
+        # Add close button
+        close_btn = QPushButton("Chiudi")
+        close_btn.clicked.connect(self.close)
+        layout.addWidget(close_btn)
+        
+        widget.setLayout(layout)
+        self.setWidget(widget)
+        
+        # Set size
+        self.setMinimumWidth(400)
+        self.setMinimumHeight(300)

@@ -793,7 +793,46 @@ class LayoutGenerator(QDialog):
             # If no elevation profile items found, look for picture placeholders
             if not profile_items:
                 QgsMessageLog.logMessage("No elevation profile items found, looking for picture placeholders", "ClipRasterLayout", Qgis.Info)
-                # For now, just use the matplotlib profiles as before
+                # Look for picture items that might be profile placeholders
+                picture_items = []
+                for item in layout.items():
+                    if isinstance(item, QgsLayoutItemPicture):
+                        # Check if it's on page 2
+                        if item.page() == 1:  # Page index starts at 0
+                            picture_items.append(item)
+                            QgsMessageLog.logMessage(f"Found picture item: {item.id()}", "ClipRasterLayout", Qgis.Info)
+                                
+                if picture_items:
+                    QgsMessageLog.logMessage(f"Found {len(picture_items)} picture items for profiles on page 2", "ClipRasterLayout", Qgis.Info)
+                    # Populate picture items with matplotlib profiles
+                    for i, (pic_item, profile_feature) in enumerate(zip(picture_items[:len(profile_features)], profile_features)):
+                        profile_name = profile_feature['name']
+                        
+                        # Get profile image path
+                        profile_path, _ = QgsProject.instance().readEntry("ClipRasterLayout", f"profile_{profile_name}")
+                        
+                        if not profile_path or not os.path.exists(profile_path):
+                            # Try profile save directory
+                            save_dir, _ = QgsProject.instance().readEntry("ClipRasterLayout", "profile_save_dir")
+                            if save_dir and os.path.exists(save_dir):
+                                profile_path = os.path.join(save_dir, f"profile_{profile_name}.png")
+                            else:
+                                # Fallback to temp directory
+                                import tempfile
+                                temp_dir = tempfile.gettempdir()
+                                profile_path = os.path.join(temp_dir, f"profile_{profile_name}.png")
+                        
+                        if os.path.exists(profile_path):
+                            pic_item.setPicturePath(profile_path)
+                            pic_item.setVisibility(True)
+                            QgsMessageLog.logMessage(f"Set profile image {i+1} to {profile_path}", "ClipRasterLayout", Qgis.Info)
+                        else:
+                            QgsMessageLog.logMessage(f"Profile image not found: {profile_path}", "ClipRasterLayout", Qgis.Warning)
+                    
+                    # Hide unused picture items
+                    for i in range(len(profile_features), len(picture_items)):
+                        picture_items[i].setVisibility(False)
+                        QgsMessageLog.logMessage(f"Hidden unused profile picture {i+1}", "ClipRasterLayout", Qgis.Info)
                 return
             
             QgsMessageLog.logMessage(f"Found {len(profile_items)} elevation profile items on page 2", "ClipRasterLayout", Qgis.Info)
