@@ -356,46 +356,62 @@ class ProfileTool(QgsMapTool):
         QgsMessageLog.logMessage(f"Profile saved to: {profile_path}", "ClipRasterLayout", Qgis.Info)
         QgsMessageLog.logMessage(f"File exists: {os.path.exists(profile_path)}", "ClipRasterLayout", Qgis.Info)
         
-        # Create dock widget to show plot
-        dock = ProfileDockWidget(fig, name, self.iface)
+        # Store profile data
         profile_data = {'name': name, 'figure': fig, 'distances': distances, 'elevations': elevations, 'image_path': profile_path}
         self.profiles.append(profile_data)
         
-        # Store profile path in feature attributes
-        profile_layer = None
-        for layer in QgsProject.instance().mapLayers().values():
-            if layer.name() == "Profili DEM":
-                profile_layer = layer
-                break
-                
-        if profile_layer:
-            # Store profile path in a custom property of the layer
-            QgsProject.instance().writeEntry("ClipRasterLayout", f"profile_{name}", profile_path)
+        # Store profile path in project custom properties
+        QgsProject.instance().writeEntry("ClipRasterLayout", f"profile_{name}", profile_path)
         
-        # Add dock widget to left area
-        self.iface.addDockWidget(Qt.LeftDockWidgetArea, dock)
+        # Try to create dock widget
+        try:
+            # Create dock widget to show plot
+            dock = ProfileDockWidget(fig, name, self.iface)
+            
+            # Add dock widget to left area
+            self.iface.addDockWidget(Qt.LeftDockWidgetArea, dock)
+            dock.show()
+            dock.raise_()
+            
+            # Store reference
+            if not hasattr(self, 'dock_widgets'):
+                self.dock_widgets = []
+            self.dock_widgets.append(dock)
+            
+            QgsMessageLog.logMessage(f"Created profile dock widget for {name}", "ClipRasterLayout", Qgis.Info)
+            
+        except Exception as e:
+            QgsMessageLog.logMessage(f"Failed to create dock widget: {str(e)}", "ClipRasterLayout", Qgis.Warning)
+            # Fallback to dialog
+            try:
+                dlg = ProfileDialog(fig, name)
+                dlg.show()
+                QgsMessageLog.logMessage(f"Created profile dialog for {name} as fallback", "ClipRasterLayout", Qgis.Info)
+            except Exception as e2:
+                QgsMessageLog.logMessage(f"Failed to create profile dialog: {str(e2)}", "ClipRasterLayout", Qgis.Critical)
         
     def create_qgis_elevation_profile(self, geometry, name):
         """Open QGIS elevation profile tool with the current line"""
         try:
-            # Open the elevation profile panel
-            self.iface.mainWindow().findChild(QAction, 'mActionShowElevationProfile').trigger()
-            
-            # Get the elevation profile dock widget
-            profile_dock = None
-            for dock in self.iface.mainWindow().findChildren(QDockWidget):
-                if 'elevation' in dock.windowTitle().lower() and 'profile' in dock.windowTitle().lower():
-                    profile_dock = dock
-                    break
-            
-            if profile_dock:
-                # The profile tool should automatically use the selected line
-                # Store geometry for layout use
-                QgsProject.instance().writeEntry("ClipRasterLayout", f"profile_geom_{name}", geometry.asWkt())
-                QgsMessageLog.logMessage(f"Opened elevation profile tool for {name}", "ClipRasterLayout", Qgis.Info)
+            # Try different ways to open the elevation profile
+            # Method 1: Direct action
+            action = self.iface.mainWindow().findChild(QAction, 'mActionShowElevationProfile')
+            if action:
+                action.trigger()
+                QgsMessageLog.logMessage("Triggered elevation profile action", "ClipRasterLayout", Qgis.Info)
             else:
-                QgsMessageLog.logMessage("Could not find elevation profile dock", "ClipRasterLayout", Qgis.Warning)
-                
+                # Method 2: Through menu
+                for action in self.iface.mainWindow().menuBar().actions():
+                    if action.menu():
+                        for subAction in action.menu().actions():
+                            if 'elevation' in subAction.text().lower() and 'profile' in subAction.text().lower():
+                                subAction.trigger()
+                                QgsMessageLog.logMessage("Triggered elevation profile through menu", "ClipRasterLayout", Qgis.Info)
+                                break
+            
+            # Store geometry for layout use
+            QgsProject.instance().writeEntry("ClipRasterLayout", f"profile_geom_{name}", geometry.asWkt())
+            
         except Exception as e:
             QgsMessageLog.logMessage(f"Failed to open QGIS elevation profile: {str(e)}", "ClipRasterLayout", Qgis.Warning)
         
@@ -481,6 +497,9 @@ class ProfileDockWidget(QDockWidget):
         self.iface = iface
         self.name = name
         
+        # Set object name for saving state
+        self.setObjectName(f"ProfileDock_{name}")
+        
         # Create widget to hold the plot
         widget = QWidget()
         layout = QVBoxLayout()
@@ -500,3 +519,26 @@ class ProfileDockWidget(QDockWidget):
         # Set size
         self.setMinimumWidth(400)
         self.setMinimumHeight(300)
+        
+        # Allow docking on all sides
+        self.setAllowedAreas(Qt.AllDockWidgetAreas)
+        
+        # Make it floating by default if preferred
+        self.setFloating(False)
+
+class ProfileDialog(QDialog):
+    def __init__(self, figure, name, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(f"Profilo {name}")
+        self.setMinimumSize(800, 600)
+        
+        layout = QVBoxLayout()
+        canvas = FigureCanvas(figure)
+        layout.addWidget(canvas)
+        
+        # Add close button
+        close_btn = QPushButton("Chiudi")
+        close_btn.clicked.connect(self.close)
+        layout.addWidget(close_btn)
+        
+        self.setLayout(layout)
