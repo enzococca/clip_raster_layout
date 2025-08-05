@@ -614,7 +614,12 @@ class ProfileTabDockWidget(QDockWidget):
                     
                     # Set the profile curve from the geometry
                     if geometry and geometry.type() == QgsWkbTypes.LineGeometry:
-                        profile_canvas.setProfileCurve(geometry)
+                        # Convert geometry to curve
+                        curve = geometry.constGet()
+                        if curve:
+                            profile_canvas.setProfileCurve(curve)
+                        else:
+                            QgsMessageLog.logMessage(f"Could not get curve from geometry for {profile_name}", "ClipRasterLayout", Qgis.Warning)
                         
                         # Set CRS
                         profile_canvas.setCrs(profile_layer.crs())

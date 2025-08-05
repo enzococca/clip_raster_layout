@@ -17,7 +17,8 @@ from qgis.core import (QgsProject, QgsLayout, QgsPrintLayout, QgsLayoutItemMap,
                       QgsLayoutFrame, QgsLayoutMultiFrame, QgsRectangle,
                       QgsCoordinateReferenceSystem, QgsCoordinateTransform,
                       QgsLayoutRenderContext, QgsLayoutItem, QgsLayoutItemMapOverview,
-                      QgsLayoutItemHtml, QgsSymbol, QgsScaleBarSettings, QgsMessageLog, Qgis)
+                      QgsLayoutItemHtml, QgsSymbol, QgsScaleBarSettings, QgsMessageLog, Qgis,
+                      QgsWkbTypes)
 
 # Try to import elevation profile (QGIS 3.26+)
 try:
