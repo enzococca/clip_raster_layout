@@ -26,6 +26,7 @@ icon=icon.png
 experimental=False
 deprecated=False
 hasProcessingProvider=no
+supportsQt6=True
 
 changelog=1.1.0
     - Atlas layout with adaptive scale to section line
