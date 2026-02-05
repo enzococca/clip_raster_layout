@@ -1,22 +1,28 @@
 [general]
 name=Clip Raster Layout
 qgisMinimumVersion=3.0
-description=Plugin per clipping raster in batch, profili DEM e layout professionale
-version=0.1
-author=Enzo
+qgisMaximumVersion=4.99
+version=1.1.0
+author=Enzo Cocca
 email=enzo.ccc@gmail.com
+description=Clip raster layers using polygon masks with optional topographic profile generation. Features batch clipping, interactive polygon drawing, section profiles with elevation charts, and automatic layer management.
+about=A comprehensive QGIS plugin for topographic analysis that provides:
 
-about=Questo plugin fornisce tre funzionalità principali:
-    1. Clipping raster in batch usando un poligono
-    2. Creazione profili topografici da DEM con sezioni tratteggiate
-    3. Generazione layout professionali con tutti i metadati necessari
+    - Batch Raster Clipping: Clip multiple raster layers (DEM, DTM, orthophotos) using a polygon mask
+    - Interactive Polygon Drawing: Draw clip polygons directly on the map canvas
+    - Topographic Sections: Create cross-section lines with automatic labeling (A-B, C-D, etc.)
+    - Elevation Profiles: Generate matplotlib elevation charts along section lines
+    - Auto-refresh Layer Lists: Layer lists update automatically when layers are added/removed
+    - Built-in Tutorial: Interactive help system with usage instructions
+
+    Compatible with QGIS 3.x (Qt5) and QGIS 4.x (Qt6).
 
 tracker=https://github.com/enzo-ccc/clip-raster-layout/issues
 repository=https://github.com/enzo-ccc/clip-raster-layout
+tags=raster,clip,dem,profile,elevation,topography,section,batch,mask
+homepage=https://github.com/enzo-ccc/clip-raster-layout
+category=Raster
 icon=icon.png
-
 experimental=False
 deprecated=False
-
-category=Raster
-tags=raster,dem,profile,layout,clip,topography
+hasProcessingProvider=no

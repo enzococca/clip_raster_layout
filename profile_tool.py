@@ -39,6 +39,8 @@ class ProfileTool(QgsMapTool):
         self.current_feature_id = None
         self.elevation_profiles = []  # Store QGIS elevation profile widgets
         self.profile_dock = None  # Single dock widget for all profiles
+        self.profile_features_to_process = []  # For sequential processing
+        self.current_profile_index = 0
         
         # Create profile layer
         self.create_profile_layer()
@@ -571,9 +573,11 @@ class ProfileTabDockWidget(QDockWidget):
             QgsMessageLog.logMessage(f"Error opening elevation profile: {str(e)}", "ClipRasterLayout", Qgis.Warning)
     
     def prepare_profiles_for_layout(self):
-        """Prepare profiles for layout without creating multiple widgets"""
+        """Open elevation profile panels sequentially and configure them"""
         try:
-            QgsMessageLog.logMessage("Preparing profiles for layout...", "ClipRasterLayout", Qgis.Info)
+            from qgis.PyQt.QtCore import QTimer
+            
+            QgsMessageLog.logMessage("Starting sequential profile creation...", "ClipRasterLayout", Qgis.Info)
             
             # Get the profile layer
             profile_layer = None
@@ -586,26 +590,246 @@ class ProfileTabDockWidget(QDockWidget):
                 QgsMessageLog.logMessage("Profile layer not found", "ClipRasterLayout", Qgis.Warning)
                 return
             
-            # Store profile information for layout use
-            profile_count = 0
-            for feature in profile_layer.getFeatures():
-                profile_name = feature['name']
-                geometry = feature.geometry()
-                
-                if geometry and profile_name:
-                    # Store profile info in project
-                    QgsProject.instance().writeEntry("ClipRasterLayout", f"profile_ready_{profile_name}", "yes")
-                    QgsProject.instance().writeEntry("ClipRasterLayout", f"profile_geom_{profile_name}", geometry.asWkt())
-                    profile_count += 1
-                    QgsMessageLog.logMessage(f"Prepared profile {profile_name} for layout", "ClipRasterLayout", Qgis.Info)
+            # Get all profile features
+            self.profile_features_to_process = list(profile_layer.getFeatures())
+            self.current_profile_index = 0
             
-            QgsMessageLog.logMessage(f"Prepared {profile_count} profiles for layout use", "ClipRasterLayout", Qgis.Info)
-            QMessageBox.information(None, "Profili Preparati", 
-                f"Preparati {profile_count} profili per il layout.\n\n"
-                "Ora puoi generare il layout e i profili saranno inclusi automaticamente.")
+            if not self.profile_features_to_process:
+                QgsMessageLog.logMessage("No profiles found to process", "ClipRasterLayout", Qgis.Warning)
+                return
+            
+            # Show instruction dialog
+            QMessageBox.information(None, "Creazione Profili Elevazione", 
+                f"Verranno creati {len(self.profile_features_to_process)} profili elevazione.\n\n"
+                "Per ogni profilo:\n"
+                "1. Si aprirà il pannello Profilo Elevazione\n"
+                "2. Seleziona la sezione corrispondente nel pannello\n"
+                "3. Il profilo verrà rinominato automaticamente\n\n"
+                "Clicca OK per iniziare.")
+            
+            # Start processing first profile
+            self.process_next_profile()
                 
         except Exception as e:
             QgsMessageLog.logMessage(f"Error preparing profiles: {str(e)}", "ClipRasterLayout", Qgis.Warning)
+    
+    def process_next_profile(self):
+        """Process the next profile in the sequence"""
+        try:
+            from qgis.PyQt.QtCore import QTimer
+            
+            if self.current_profile_index >= len(self.profile_features_to_process):
+                # All profiles processed
+                QgsMessageLog.logMessage(f"Completed processing {len(self.profile_features_to_process)} profiles", "ClipRasterLayout", Qgis.Info)
+                QMessageBox.information(None, "Profili Completati", 
+                    f"Tutti i {len(self.profile_features_to_process)} profili sono stati creati.\n\n"
+                    "Ora puoi generare il layout.")
+                return
+            
+            feature = self.profile_features_to_process[self.current_profile_index]
+            profile_name = feature['name']
+            
+            QgsMessageLog.logMessage(f"Processing profile {self.current_profile_index + 1}/{len(self.profile_features_to_process)}: {profile_name}", "ClipRasterLayout", Qgis.Info)
+            
+            # Open elevation profile panel
+            self.open_elevation_profile()
+            
+            # Give time for the panel to open, then configure it
+            QTimer.singleShot(1000, lambda: self.configure_current_profile(feature))
+            
+        except Exception as e:
+            QgsMessageLog.logMessage(f"Error processing profile: {str(e)}", "ClipRasterLayout", Qgis.Warning)
+    
+    def configure_current_profile(self, feature):
+        """Configure the current elevation profile"""
+        try:
+            from qgis.PyQt.QtCore import QTimer
+            from qgis.PyQt.QtWidgets import QWidget, QToolButton, QCheckBox, QTreeWidget, QTreeWidgetItem
+            
+            profile_name = feature['name']
+            geometry = feature.geometry()
+            
+            # Find the elevation profile dock
+            elevation_dock = None
+            elevation_canvas = None
+            
+            for dock in self.iface.mainWindow().findChildren(QDockWidget):
+                if 'elevation' in dock.windowTitle().lower() and 'profile' in dock.windowTitle().lower():
+                    elevation_dock = dock
+                    # Look for the elevation profile canvas inside the dock
+                    if HAS_ELEVATION_PROFILE:
+                        for canvas in dock.findChildren(QgsElevationProfileCanvas):
+                            elevation_canvas = canvas
+                            break
+                    break
+            
+            if elevation_dock:
+                # 1. Rename the dock with section name
+                old_title = elevation_dock.windowTitle()
+                elevation_dock.setWindowTitle(f"Profilo Elevazione {profile_name}")
+                QgsMessageLog.logMessage(f"Renamed profile dock from '{old_title}' to: 'Profilo Elevazione {profile_name}'", "ClipRasterLayout", Qgis.Info)
+                
+                # Force update of the dock title
+                elevation_dock.update()
+                elevation_dock.repaint()
+                
+                # 2. Configure layer checkboxes - enable only the DEM used
+                try:
+                    # Find the layer tree widget in the elevation profile dock
+                    tree_widgets = elevation_dock.findChildren(QTreeWidget)
+                    if tree_widgets:
+                        tree = tree_widgets[0]
+                        QgsMessageLog.logMessage(f"Found layer tree widget with {tree.topLevelItemCount()} items", "ClipRasterLayout", Qgis.Info)
+                        
+                        # First, uncheck all items
+                        for i in range(tree.topLevelItemCount()):
+                            item = tree.topLevelItem(i)
+                            if item.checkState(0) == Qt.Checked:
+                                item.setCheckState(0, Qt.Unchecked)
+                        
+                        # Then check only the DEM layer
+                        if self.dem_layer:
+                            dem_name = self.dem_layer.name()
+                            for i in range(tree.topLevelItemCount()):
+                                item = tree.topLevelItem(i)
+                                if item.text(0) == dem_name:
+                                    item.setCheckState(0, Qt.Checked)
+                                    QgsMessageLog.logMessage(f"Enabled DEM layer: {dem_name}", "ClipRasterLayout", Qgis.Info)
+                                    break
+                except Exception as e:
+                    QgsMessageLog.logMessage(f"Could not configure layer checkboxes: {str(e)}", "ClipRasterLayout", Qgis.Warning)
+                
+                # 3. Select the profile line and capture it
+                if elevation_canvas and HAS_ELEVATION_PROFILE:
+                    try:
+                        # First set the profile curve
+                        if geometry and geometry.type() == QgsWkbTypes.LineGeometry:
+                            elevation_canvas.setProfileCurve(geometry.constGet())
+                            QgsMessageLog.logMessage(f"Set profile curve for {profile_name}", "ClipRasterLayout", Qgis.Info)
+                            
+                            # Give time for the curve to be set
+                            QTimer.singleShot(500, lambda: self.capture_profile_curve(elevation_dock, feature))
+                            return  # Don't process next profile yet
+                    except Exception as e:
+                        QgsMessageLog.logMessage(f"Could not set profile curve: {str(e)}", "ClipRasterLayout", Qgis.Warning)
+                
+                # If we couldn't set up the curve automatically, show message and continue
+                self.show_profile_ready_message(profile_name)
+            else:
+                QgsMessageLog.logMessage("Elevation profile dock not found", "ClipRasterLayout", Qgis.Warning)
+                # Move to next profile
+                self.current_profile_index += 1
+                self.process_next_profile()
+            
+        except Exception as e:
+            QgsMessageLog.logMessage(f"Error configuring profile: {str(e)}", "ClipRasterLayout", Qgis.Warning)
+            self.current_profile_index += 1
+            self.process_next_profile()
+    
+    def capture_profile_curve(self, elevation_dock, feature):
+        """Capture the profile curve by clicking the 'capture curve from feature' tool and selecting the feature"""
+        try:
+            from qgis.PyQt.QtWidgets import QToolButton
+            from qgis.PyQt.QtCore import QTimer
+            
+            profile_name = feature['name']
+            
+            # Find and click the "capture curve from feature" button
+            capture_button = None
+            all_buttons = elevation_dock.findChildren(QToolButton)
+            QgsMessageLog.logMessage(f"Found {len(all_buttons)} tool buttons in elevation dock", "ClipRasterLayout", Qgis.Info)
+            
+            for button in all_buttons:
+                tooltip = button.toolTip()
+                QgsMessageLog.logMessage(f"Button tooltip: '{tooltip}'", "ClipRasterLayout", Qgis.Info)
+                
+                # Check various possible texts for the capture from feature button
+                tooltip_lower = tooltip.lower()
+                if ('feature' in tooltip_lower) or \
+                   ('elemento' in tooltip_lower and 'cattura' in tooltip_lower) or \
+                   ('capture curve from selected feature' in tooltip_lower) or \
+                   ('cattura curva dall\'elemento selezionato' in tooltip_lower) or \
+                   ('from selected' in tooltip_lower):
+                    capture_button = button
+                    QgsMessageLog.logMessage(f"Selected capture button with tooltip: {tooltip}", "ClipRasterLayout", Qgis.Info)
+                    break
+            
+            if capture_button:
+                # Select the profile feature in the layer FIRST
+                profile_layer = None
+                for layer in QgsProject.instance().mapLayers().values():
+                    if layer.name() == "Profili DEM":
+                        profile_layer = layer
+                        break
+                
+                if profile_layer:
+                    # Clear any existing selection
+                    profile_layer.removeSelection()
+                    # Select only this feature
+                    profile_layer.select(feature.id())
+                    QgsMessageLog.logMessage(f"Selected feature {profile_name} in profile layer", "ClipRasterLayout", Qgis.Info)
+                    
+                    # Now click the capture button
+                    # Some buttons need to be toggled rather than clicked
+                    if capture_button.isCheckable():
+                        capture_button.setChecked(True)
+                        QgsMessageLog.logMessage(f"Toggled 'capture curve from feature' button ON for {profile_name}", "ClipRasterLayout", Qgis.Info)
+                    else:
+                        capture_button.click()
+                        QgsMessageLog.logMessage(f"Clicked 'capture curve from feature' button for {profile_name}", "ClipRasterLayout", Qgis.Info)
+                    
+                    # Refresh the canvas to ensure selection is visible
+                    self.iface.mapCanvas().refresh()
+                    
+                    # Give time for the capture to complete
+                    QTimer.singleShot(1500, lambda: self.finish_profile_configuration(profile_name))
+                else:
+                    self.show_profile_ready_message(profile_name)
+            else:
+                QgsMessageLog.logMessage("Could not find 'capture curve from feature' button", "ClipRasterLayout", Qgis.Warning)
+                # Log all button tooltips for debugging
+                for button in elevation_dock.findChildren(QToolButton):
+                    if button.toolTip():
+                        QgsMessageLog.logMessage(f"Button tooltip: {button.toolTip()}", "ClipRasterLayout", Qgis.Info)
+                self.show_profile_ready_message(profile_name)
+                
+        except Exception as e:
+            QgsMessageLog.logMessage(f"Error capturing profile curve: {str(e)}", "ClipRasterLayout", Qgis.Warning)
+            self.show_profile_ready_message(profile_name)
+    
+    def finish_profile_configuration(self, profile_name):
+        """Finish configuration after curve capture"""
+        try:
+            # Clear selection
+            for layer in QgsProject.instance().mapLayers().values():
+                if layer.name() == "Profili DEM":
+                    layer.removeSelection()
+                    break
+            
+            # Store that this profile is ready
+            QgsProject.instance().writeEntry("ClipRasterLayout", f"profile_ready_{profile_name}", "yes")
+            QgsMessageLog.logMessage(f"Profile {profile_name} configuration completed", "ClipRasterLayout", Qgis.Info)
+            
+            # Show completion message
+            self.show_profile_ready_message(profile_name)
+            
+        except Exception as e:
+            QgsMessageLog.logMessage(f"Error finishing profile configuration: {str(e)}", "ClipRasterLayout", Qgis.Warning)
+            self.show_profile_ready_message(profile_name)
+    
+    def show_profile_ready_message(self, profile_name):
+        """Show message that profile is ready and move to next"""
+        msg = QMessageBox.information(None, f"Profilo {profile_name}", 
+            f"Profilo {profile_name} configurato.\n\n"
+            f"Verifica che:\n"
+            f"- Il profilo sia visibile\n"
+            f"- Solo il DEM corretto sia attivo\n"
+            f"- La sezione {profile_name} sia visualizzata\n\n"
+            f"Clicca OK per continuare.")
+        
+        # Move to next profile
+        self.current_profile_index += 1
+        self.process_next_profile()
     
 
 class ProfileDockWidget(QDockWidget):

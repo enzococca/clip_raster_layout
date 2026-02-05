@@ -1,64 +1,91 @@
-# Clip Raster Layout Plugin per QGIS
+# Clip Raster Layout Plugin for QGIS
 
-Plugin QGIS che fornisce tre funzionalità principali per l'analisi topografica:
+A comprehensive QGIS plugin for topographic analysis that provides batch raster clipping, interactive polygon drawing, and elevation profile generation.
 
-## Funzionalità
+**Compatible with QGIS 3.x (Qt5) and QGIS 4.x (Qt6)**
 
-### 1. Clip Raster in Batch
-- Clipping multiplo di raster usando un poligono
-- Selezione dei raster da elaborare
-- Barra di progresso per monitorare l'operazione
-- Aggiunta automatica dei raster clippati alla mappa
+## Features
 
-### 2. Creazione Profili DEM
-- Click su due punti per creare profili topografici
-- Linee tratteggiate nere con etichette (A-B, C-D, ecc.)
-- Calcolo lunghezza 2D e 3D
-- Elevazioni ai punti estremi
-- Grafico del profilo con min/max annotati
-- Possibilità di scegliere dove salvare le immagini dei profili
+### 1. Batch Raster Clipping
+- Clip multiple raster layers simultaneously using a polygon mask
+- Supports DEM, DTM, DSM, and orthophoto layers
+- Automatic loading of clipped rasters to the map
+- Progress tracking during batch operations
 
-### 3. Generazione Layout Professionale
-- Layout automatico con:
-  - Mappa principale con raster e profili
-  - Grafico del profilo elevazione
-  - Freccia del Nord
-  - Barra di scala dinamica
-  - Legenda
-  - Mappa di inquadramento
-  - Griglia coordinate
-  - Tabella metadati
-- Supporto per vari formati carta (A4-A1)
-- Scale topografiche standard (1:1 - 1:500000)
-- Esportazione PDF
+### 2. Interactive Polygon Drawing
+- Draw clip polygons directly on the map canvas
+- Left-click to add vertices
+- Double-click or right-click to finish
+- Press ESC to cancel
+- Semi-transparent preview while drawing
 
-## Installazione
+### 3. Topographic Sections (Optional)
+- Create cross-section lines by clicking two points
+- Automatic labeling (A-B, C-D, E-F, etc.)
+- Dashed line style with arrow markers
+- Sections are optional - you can clip without creating them
 
-1. Copia la cartella `clip_raster_layout` nella directory dei plugin QGIS:
-   - Windows: `C:\Users\[username]\AppData\Roaming\QGIS\QGIS3\profiles\default\python\plugins\`
-   - macOS: `~/Library/Application Support/QGIS/QGIS3/profiles/default/python/plugins/`
-   - Linux: `~/.local/share/QGIS/QGIS3/profiles/default/python/plugins/`
+### 4. Elevation Profiles
+- Generate elevation charts along section lines
+- Matplotlib-based visualization
+- Shows distance vs elevation
+- Exported as PNG images
 
-2. Riavvia QGIS o ricarica i plugin
+### 5. Auto-refresh Layer Lists
+- Layer lists update automatically when you add/remove layers in QGIS
+- Manual refresh buttons available if needed
+- No need to reload the plugin when loading new data
 
-3. Attiva il plugin dal menu Plugin → Gestisci e installa plugin
+### 6. Built-in Tutorial
+- Interactive help system with tabbed interface
+- Quick start guide
+- Detailed instructions for each feature
+- Tips and best practices
 
-## Requisiti
+## Installation
 
-- QGIS 3.x
+1. Copy the `clip_raster_layout` folder to your QGIS plugins directory:
+   - **Windows**: `C:\Users\[username]\AppData\Roaming\QGIS\QGIS3\profiles\default\python\plugins\`
+   - **macOS**: `~/Library/Application Support/QGIS/QGIS3/profiles/default/python/plugins/`
+   - **Linux**: `~/.local/share/QGIS/QGIS3/profiles/default/python/plugins/`
+
+2. Restart QGIS or reload plugins
+
+3. Enable the plugin from: Plugins → Manage and Install Plugins → Installed
+
+## Requirements
+
+- QGIS 3.0 or higher (tested up to QGIS 4.x)
 - Python 3.x
-- Librerie Python: numpy, matplotlib
+- Required Python libraries: numpy, matplotlib
 
-## Uso
+## Quick Start
 
-1. **Clip Raster**: Menu Raster → Clip Raster Layout → Clip Raster in Batch
-2. **Profili DEM**: Menu Raster → Clip Raster Layout → Crea Profilo DEM
-3. **Layout**: Menu Raster → Clip Raster Layout → Genera Layout Professionale
+1. Click the **Clip & Profile Layout** button in the toolbar or access via Plugins menu
+2. **Select rasters**: Choose one or more DEM/raster layers from the list
+3. **Choose clip polygon**: Select an existing polygon layer or draw a new one
+4. **Sections (optional)**: Enable "Create sections/profiles" and draw section lines
+5. **Output folder**: Select where to save clipped rasters and profiles
+6. Click **Run Clip**
 
-## Autore
+## Usage Tips
 
-Enzo - enzo@example.com
+- Hold **Ctrl** while clicking to select multiple rasters
+- Clipped rasters are saved with the suffix `_clipped`
+- Layer lists refresh automatically when you load new layers
+- Use the **?Tutorial** button for detailed help
 
-## Licenza
+## Keyboard Shortcuts
+
+- **Left-click**: Add point (polygon/section drawing)
+- **Right-click**: Finish polygon / Cancel section
+- **Double-click**: Finish polygon
+- **ESC**: Cancel current drawing operation
+
+## Author
+
+Enzo Cocca - enzo.ccc@gmail.com
+
+## License
 
 GPL v3

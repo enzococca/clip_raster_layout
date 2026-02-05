@@ -1,0 +1,140 @@
+<Layout worldFileMap="{e07f7c34-a093-4313-8a43-db30351a283f}" printResolution="300" name="ClipProfileAtlas" units="mm">
+ <Snapper snapToGrid="0" snapToItems="1" tolerance="5" snapToGuides="1"/>
+ <Grid offsetY="0" offsetX="0" resUnits="mm" offsetUnits="mm" resolution="10"/>
+ <PageCollection>
+  <symbol alpha="1" clip_to_extent="1" frame_rate="10" is_animated="0" name="" type="fill" force_rhr="0">
+   <data_defined_properties>
+    <Option type="Map">
+     <Option value="" name="name" type="QString"/>
+     <Option name="properties"/>
+     <Option value="collection" name="type" type="QString"/>
+    </Option>
+   </data_defined_properties>
+   <layer enabled="1" locked="0" id="{49e23a7f-3c49-4b34-ba33-7df457948dd8}" pass="0" class="SimpleFill">
+    <Option type="Map">
+     <Option value="3x:0,0,0,0,0,0" name="border_width_map_unit_scale" type="QString"/>
+     <Option value="255,255,255,255,rgb:1,1,1,1" name="color" type="QString"/>
+     <Option value="miter" name="joinstyle" type="QString"/>
+     <Option value="0,0" name="offset" type="QString"/>
+     <Option value="3x:0,0,0,0,0,0" name="offset_map_unit_scale" type="QString"/>
+     <Option value="MM" name="offset_unit" type="QString"/>
+     <Option value="35,35,35,255,rgb:0.13725490196078433,0.13725490196078433,0.13725490196078433,1" name="outline_color" type="QString"/>
+     <Option value="no" name="outline_style" type="QString"/>
+     <Option value="0.26" name="outline_width" type="QString"/>
+     <Option value="MM" name="outline_width_unit" type="QString"/>
+     <Option value="solid" name="style" type="QString"/>
+    </Option>
+    <data_defined_properties>
+     <Option type="Map">
+      <Option value="" name="name" type="QString"/>
+      <Option name="properties"/>
+      <Option value="collection" name="type" type="QString"/>
+     </Option>
+    </data_defined_properties>
+   </layer>
+  </symbol>
+  <LayoutItem templateUuid="{408c29e8-4a1b-46d5-9f2e-262ec5e9dc37}" positionLock="false" position="0,0,mm" positionOnPage="0,0,mm" opacity="1" background="true" visibility="1" excludeFromExports="0" itemRotation="0" blendMode="0" uuid="{408c29e8-4a1b-46d5-9f2e-262ec5e9dc37}" frame="false" type="65638" size="297,210,mm" frameJoinStyle="miter" groupUuid="" id="" referencePoint="0" zValue="0" outlineWidthM="0.3,mm">
+   <FrameColor alpha="255" blue="0" green="0" red="0"/>
+   <BackgroundColor alpha="255" blue="255" green="255" red="255"/>
+   <LayoutObject>
+    <dataDefinedProperties>
+     <Option type="Map">
+      <Option value="" name="name" type="QString"/>
+      <Option name="properties"/>
+      <Option value="collection" name="type" type="QString"/>
+     </Option>
+    </dataDefinedProperties>
+    <customproperties>
+     <Option/>
+    </customproperties>
+   </LayoutObject>
+   <symbol alpha="1" clip_to_extent="1" frame_rate="10" is_animated="0" name="" type="fill" force_rhr="0">
+    <data_defined_properties>
+     <Option type="Map">
+      <Option value="" name="name" type="QString"/>
+      <Option name="properties"/>
+      <Option value="collection" name="type" type="QString"/>
+     </Option>
+    </data_defined_properties>
+    <layer enabled="1" locked="0" id="{520e19dc-bdf8-4aeb-986d-36f815123091}" pass="0" class="SimpleFill">
+     <Option type="Map">
+      <Option value="3x:0,0,0,0,0,0" name="border_width_map_unit_scale" type="QString"/>
+      <Option value="255,255,255,255,rgb:1,1,1,1" name="color" type="QString"/>
+      <Option value="miter" name="joinstyle" type="QString"/>
+      <Option value="0,0" name="offset" type="QString"/>
+      <Option value="3x:0,0,0,0,0,0" name="offset_map_unit_scale" type="QString"/>
+      <Option value="MM" name="offset_unit" type="QString"/>
+      <Option value="35,35,35,255,rgb:0.13725490196078433,0.13725490196078433,0.13725490196078433,1" name="outline_color" type="QString"/>
+      <Option value="no" name="outline_style" type="QString"/>
+      <Option value="0.26" name="outline_width" type="QString"/>
+      <Option value="MM" name="outline_width_unit" type="QString"/>
+      <Option value="solid" name="style" type="QString"/>
+     </Option>
+     <data_defined_properties>
+      <Option type="Map">
+       <Option value="" name="name" type="QString"/>
+       <Option name="properties"/>
+       <Option value="collection" name="type" type="QString"/>
+      </Option>
+     </data_defined_properties>
+    </layer>
+   </symbol>
+  </LayoutItem>
+  <GuideCollection visible="1"/>
+ </PageCollection>
+ <LayoutItem templateUuid="{c79979a1-7fe8-44ad-812a-6ec7e4cda2a9}" positionLock="false" position="9.59315,164.682,mm" positionOnPage="9.59315,164.682,mm" opacity="1" keepLayerSet="false" mapFlags="0" enableZRange="0" background="true" visibility="1" excludeFromExports="0" isTemporal="0" itemRotation="0" mapRotation="0" blendMode="0" followPresetName="" uuid="{c79979a1-7fe8-44ad-812a-6ec7e4cda2a9}" frame="false" type="65639" followPreset="false" labelMargin="0,mm" size="279.267,41.0374,mm" frameJoinStyle="miter" drawCanvasItems="true" groupUuid="" id="Mappa 2" referencePoint="0" zValue="2" outlineWidthM="0.3,mm">
+  <FrameColor alpha="255" blue="0" green="0" red="0"/>
+  <BackgroundColor alpha="255" blue="255" green="255" red="255"/>
+  <LayoutObject>
+   <dataDefinedProperties>
+    <Option type="Map">
+     <Option value="" name="name" type="QString"/>
+     <Option name="properties"/>
+     <Option value="collection" name="type" type="QString"/>
+    </Option>
+   </dataDefinedProperties>
+   <customproperties>
+    <Option/>
+   </customproperties>
+  </LayoutObject>
+  <Extent ymax="38.84990864879246431" xmax="35.63633642847578642" xmin="35.63019626326131117" ymin="38.84900637260636813"/>
+  <LayerSet/>
+  <AtlasMap margin="0.10000000000000001" atlasDriven="0" scalingMode="2"/>
+  <labelBlockingItems/>
+  <atlasClippingSettings enabled="0" restrictLayers="0" forceLabelsInside="0" clippingType="1">
+   <layersToClip/>
+  </atlasClippingSettings>
+  <itemClippingSettings enabled="0" forceLabelsInside="0" clippingType="1" clipSource=""/>
+ </LayoutItem>
+ <LayoutItem templateUuid="{e07f7c34-a093-4313-8a43-db30351a283f}" positionLock="false" position="6.92838,7.99429,mm" positionOnPage="6.92838,7.99429,mm" opacity="1" keepLayerSet="false" mapFlags="0" enableZRange="0" background="true" visibility="1" excludeFromExports="0" isTemporal="0" itemRotation="0" mapRotation="0" blendMode="0" followPresetName="" uuid="{e07f7c34-a093-4313-8a43-db30351a283f}" frame="false" type="65639" followPreset="false" labelMargin="0,mm" size="281.932,151.359,mm" frameJoinStyle="miter" drawCanvasItems="true" groupUuid="" id="Mappa 1" referencePoint="0" zValue="1" outlineWidthM="0.3,mm">
+  <FrameColor alpha="255" blue="0" green="0" red="0"/>
+  <BackgroundColor alpha="255" blue="255" green="255" red="255"/>
+  <LayoutObject>
+   <dataDefinedProperties>
+    <Option type="Map">
+     <Option value="" name="name" type="QString"/>
+     <Option name="properties"/>
+     <Option value="collection" name="type" type="QString"/>
+    </Option>
+   </dataDefinedProperties>
+   <customproperties>
+    <Option/>
+   </customproperties>
+  </LayoutObject>
+  <Extent ymax="38.84990864879246431" xmax="35.63410666999256904" xmin="35.63242602174452855" ymin="38.84900637260636813"/>
+  <LayerSet/>
+  <AtlasMap margin="0.10000000000000001" atlasDriven="0" scalingMode="2"/>
+  <labelBlockingItems/>
+  <atlasClippingSettings enabled="0" restrictLayers="0" forceLabelsInside="0" clippingType="1">
+   <layersToClip/>
+  </atlasClippingSettings>
+  <itemClippingSettings enabled="0" forceLabelsInside="0" clippingType="1" clipSource=""/>
+ </LayoutItem>
+ <customproperties>
+  <Option type="Map">
+   <Option value="png" name="atlasRasterFormat" type="QString"/>
+   <Option value="true" name="singleFile" type="bool"/>
+  </Option>
+ </customproperties>
+ <Atlas enabled="0" pageNameExpression="" filterFeatures="0" filenamePattern="'output_'||@atlas_featurenumber" coverageLayer="" hideCoverage="0" sortFeatures="0"/>
+</Layout>

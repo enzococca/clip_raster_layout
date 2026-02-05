@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-from qgis.PyQt.QtCore import Qt, QRectF, QPointF, QSizeF, QDateTime
+# Compatible with QGIS 3.x (Qt5) and QGIS 4.x (Qt6)
+from qgis.PyQt.QtCore import QRectF, QPointF, QSizeF, QDateTime
 from qgis.PyQt.QtWidgets import QApplication
 from qgis.PyQt.QtGui import QFont, QColor, QPainter
 from qgis.PyQt.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
@@ -18,7 +19,20 @@ from qgis.core import (QgsProject, QgsLayout, QgsPrintLayout, QgsLayoutItemMap,
                       QgsCoordinateReferenceSystem, QgsCoordinateTransform,
                       QgsLayoutRenderContext, QgsLayoutItem, QgsLayoutItemMapOverview,
                       QgsLayoutItemHtml, QgsSymbol, QgsScaleBarSettings, QgsMessageLog, Qgis,
-                      QgsWkbTypes)
+                      QgsWkbTypes, QgsLayoutAtlas, QgsLayoutObject, QgsProperty)
+
+# Qt5/Qt6 compatibility
+try:
+    from qgis.PyQt.QtCore import Qt
+    _qt6 = hasattr(Qt, 'AlignmentFlag')
+except ImportError:
+    _qt6 = False
+
+if _qt6:
+    Qt_AlignHCenter = Qt.AlignmentFlag.AlignHCenter
+else:
+    from qgis.PyQt.QtCore import Qt
+    Qt_AlignHCenter = Qt.AlignHCenter
 
 # Try to import elevation profile (QGIS 3.26+)
 try:
@@ -38,129 +52,150 @@ class LayoutGenerator(QDialog):
         self.profile_path = None
         
     def setupUi(self):
-        self.setWindowTitle("Genera Layout Professionale")
+        self.setWindowTitle("Generate Professional Layout")
         self.setMinimumWidth(600)
-        
+
         layout = QVBoxLayout()
-        
+
         # Raster selection
-        raster_group = QGroupBox("Selezione Raster")
+        raster_group = QGroupBox("Raster Selection")
         raster_layout = QFormLayout()
-        
+
         self.raster_combo = QComboBox()
-        raster_layout.addRow("Raster principale:", self.raster_combo)
-        
-        self.use_clipped = QCheckBox("Usa raster clippato")
+        raster_layout.addRow("Main raster:", self.raster_combo)
+
+        self.use_clipped = QCheckBox("Use clipped raster")
         self.use_clipped.setChecked(True)
         raster_layout.addRow(self.use_clipped)
-        
+
         raster_group.setLayout(raster_layout)
         layout.addWidget(raster_group)
-        
+
         # Profile selection
-        profile_group = QGroupBox("Profilo")
+        profile_group = QGroupBox("Profile")
         profile_layout = QFormLayout()
-        
+
         self.profile_combo = QComboBox()
-        profile_layout.addRow("Profilo da includere:", self.profile_combo)
-        
-        self.include_profile = QCheckBox("Includi profilo nel layout")
+        profile_layout.addRow("Profile to include:", self.profile_combo)
+
+        self.include_profile = QCheckBox("Include profile in layout")
         self.include_profile.setChecked(True)
         profile_layout.addRow(self.include_profile)
-        
+
         profile_group.setLayout(profile_layout)
         layout.addWidget(profile_group)
-        
+
         # Layout settings
-        settings_group = QGroupBox("Impostazioni Layout")
+        settings_group = QGroupBox("Layout Settings")
         settings_layout = QFormLayout()
-        
-        self.title_edit = QLineEdit("Analisi Topografica")
-        settings_layout.addRow("Titolo:", self.title_edit)
-        
+
+        self.title_edit = QLineEdit("Topographic Analysis")
+        settings_layout.addRow("Title:", self.title_edit)
+
         self.author_edit = QLineEdit()
-        settings_layout.addRow("Autore:", self.author_edit)
-        
+        settings_layout.addRow("Author:", self.author_edit)
+
         self.scale_combo = QComboBox()
-        scales = ["1:1", "1:10", "1:20", "1:50", "1:100", "1:200", "1:500", 
-                  "1:1000", "1:2000", "1:5000", "1:10000", "1:25000", "1:50000", 
+        scales = ["1:1", "1:10", "1:20", "1:50", "1:100", "1:200", "1:500",
+                  "1:1000", "1:2000", "1:5000", "1:10000", "1:25000", "1:50000",
                   "1:100000", "1:250000", "1:500000"]
         self.scale_combo.addItems(scales)
         self.scale_combo.setEditable(True)  # Allow custom scales
         self.scale_combo.setCurrentIndex(7)  # Default 1:1000
-        settings_layout.addRow("Scala:", self.scale_combo)
-        
+        settings_layout.addRow("Scale:", self.scale_combo)
+
         self.paper_combo = QComboBox()
-        self.paper_combo.addItems(["A4 Orizzontale", "A3 Orizzontale", "A2 Orizzontale", "A1 Orizzontale"])
+        self.paper_combo.addItems(["A4 Landscape", "A3 Landscape", "A2 Landscape", "A1 Landscape"])
         self.paper_combo.setCurrentIndex(1)  # Default A3
-        settings_layout.addRow("Formato carta:", self.paper_combo)
-        
+        settings_layout.addRow("Paper format:", self.paper_combo)
+
         self.logo_path = QLineEdit()
-        logo_button = QPushButton("Sfoglia...")
+        logo_button = QPushButton("Browse...")
         logo_button.clicked.connect(self.select_logo)
         logo_layout = QHBoxLayout()
         logo_layout.addWidget(self.logo_path)
         logo_layout.addWidget(logo_button)
         settings_layout.addRow("Logo:", logo_layout)
-        
+
         self.notes_edit = QTextEdit()
         self.notes_edit.setMaximumHeight(60)
-        settings_layout.addRow("Note:", self.notes_edit)
-        
+        settings_layout.addRow("Notes:", self.notes_edit)
+
         settings_group.setLayout(settings_layout)
         layout.addWidget(settings_group)
-        
+
         # Components to include
-        components_group = QGroupBox("Componenti da includere")
+        components_group = QGroupBox("Components to include")
         components_layout = QVBoxLayout()
-        
-        self.include_north = QCheckBox("Freccia del Nord")
+
+        self.include_north = QCheckBox("North arrow")
         self.include_north.setChecked(True)
         components_layout.addWidget(self.include_north)
-        
-        self.include_scale = QCheckBox("Barra di scala")
+
+        self.include_scale = QCheckBox("Scale bar")
         self.include_scale.setChecked(True)
         components_layout.addWidget(self.include_scale)
-        
-        self.include_legend = QCheckBox("Legenda")
+
+        self.include_legend = QCheckBox("Legend")
         self.include_legend.setChecked(True)
         components_layout.addWidget(self.include_legend)
-        
-        self.include_overview = QCheckBox("Mappa di inquadramento")
+
+        self.include_overview = QCheckBox("Overview map")
         self.include_overview.setChecked(True)
         components_layout.addWidget(self.include_overview)
-        
-        self.include_grid = QCheckBox("Griglia coordinate")
+
+        self.include_grid = QCheckBox("Coordinate grid")
         self.include_grid.setChecked(True)
         components_layout.addWidget(self.include_grid)
-        
-        self.include_metadata = QCheckBox("Tabella metadati")
+
+        self.include_metadata = QCheckBox("Metadata table")
         self.include_metadata.setChecked(True)
         components_layout.addWidget(self.include_metadata)
-        
+
         components_group.setLayout(components_layout)
         layout.addWidget(components_group)
+
+        # Atlas options
+        atlas_group = QGroupBox("Atlas (One page per section)")
+        atlas_layout = QVBoxLayout()
+
+        self.enable_atlas = QCheckBox("Enable Atlas mode")
+        self.enable_atlas.setChecked(False)
+        self.enable_atlas.setToolTip("Generate one PDF page per section with automatic map extent")
+        atlas_layout.addWidget(self.enable_atlas)
+
+        self.atlas_margin = QSpinBox()
+        self.atlas_margin.setRange(5, 50)
+        self.atlas_margin.setValue(10)
+        self.atlas_margin.setSuffix(" %")
+        atlas_margin_layout = QHBoxLayout()
+        atlas_margin_layout.addWidget(QLabel("Map margin:"))
+        atlas_margin_layout.addWidget(self.atlas_margin)
+        atlas_layout.addLayout(atlas_margin_layout)
+
+        atlas_group.setLayout(atlas_layout)
+        layout.addWidget(atlas_group)
         
         # Buttons
         button_layout = QHBoxLayout()
-        
-        self.generate_button = QPushButton("Genera Layout")
+
+        self.generate_button = QPushButton("Generate Layout")
         self.generate_button.clicked.connect(self.generate_layout)
         button_layout.addWidget(self.generate_button)
-        
-        self.export_button = QPushButton("Esporta PDF")
+
+        self.export_button = QPushButton("Export PDF")
         self.export_button.clicked.connect(self.export_pdf)
         self.export_button.setEnabled(False)
         button_layout.addWidget(self.export_button)
-        
-        self.close_button = QPushButton("Chiudi")
+
+        self.close_button = QPushButton("Close")
         self.close_button.clicked.connect(self.close)
         button_layout.addWidget(self.close_button)
-        
+
         # Template selection
         template_layout = QHBoxLayout()
         template_layout.addWidget(QLabel("Template:"))
-        self.template_checkbox = QCheckBox("Usa template_layout.qpt")
+        self.template_checkbox = QCheckBox("Use template_layout.qpt")
         self.template_checkbox.setChecked(True)
         template_layout.addWidget(self.template_checkbox)
         layout.addLayout(template_layout)
@@ -184,7 +219,7 @@ class LayoutGenerator(QDialog):
                 self.raster_combo.addItem(layer.name(), layer)
                 
         # Add profile options
-        self.profile_combo.addItem("Nessuno", None)
+        self.profile_combo.addItem("None", None)
         
         # Check for profile layer
         for layer in QgsProject.instance().mapLayers().values():
@@ -196,16 +231,21 @@ class LayoutGenerator(QDialog):
                         self.profile_combo.addItem(profile_name, feature)
         
     def select_logo(self):
-        file_path, _ = QFileDialog.getOpenFileName(self, "Seleziona Logo", "", "Immagini (*.png *.jpg *.jpeg *.svg)")
+        file_path, _ = QFileDialog.getOpenFileName(self, "Select Logo", "", "Images (*.png *.jpg *.jpeg *.svg)")
         if file_path:
             self.logo_path.setText(file_path)
             
     def generate_layout(self):
         raster_layer = self.raster_combo.currentData()
         if not raster_layer:
-            QMessageBox.warning(self, "Attenzione", "Seleziona un raster")
+            QMessageBox.warning(self, "Warning", "Select a raster")
             return
-            
+
+        # Check if Atlas mode is enabled
+        if self.enable_atlas.isChecked():
+            self.generate_atlas_layout(raster_layer)
+            return
+
         # Create layout
         project = QgsProject.instance()
         layout_name = f"Layout_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
@@ -241,10 +281,10 @@ class LayoutGenerator(QDialog):
         # Set page size based on selection
         page = layout.pageCollection().page(0)
         paper_sizes = {
-            "A4 Orizzontale": (297, 210),
-            "A3 Orizzontale": (420, 297),
-            "A2 Orizzontale": (594, 420),
-            "A1 Orizzontale": (841, 594)
+            "A4 Landscape": (297, 210),
+            "A3 Landscape": (420, 297),
+            "A2 Landscape": (594, 420),
+            "A1 Landscape": (841, 594)
         }
         
         size = paper_sizes[self.paper_combo.currentText()]
@@ -252,7 +292,7 @@ class LayoutGenerator(QDialog):
         
         # Main map - using template coordinates for A3
         map_item = QgsLayoutItemMap(layout)
-        if self.paper_combo.currentText() == "A3 Orizzontale":
+        if self.paper_combo.currentText() == "A3 Landscape":
             map_item.setRect(2.15, 14.18, 292.59, 146.92)
         else:
             # Scale proportionally for other sizes
@@ -357,7 +397,7 @@ class LayoutGenerator(QDialog):
             scalebar.setFont(QFont("Arial", 10))
             scalebar.setHeight(3)
             
-            if self.paper_combo.currentText() == "A3 Orizzontale":
+            if self.paper_combo.currentText() == "A3 Landscape":
                 scalebar.attemptMove(QgsLayoutPoint(88.96, 150.16, QgsUnitTypes.LayoutMillimeters))
             else:
                 scalebar.attemptMove(QgsLayoutPoint(20, size[1] - 40, QgsUnitTypes.LayoutMillimeters))
@@ -389,7 +429,7 @@ class LayoutGenerator(QDialog):
                     root.addLayer(layer)
                     break
                     
-            if self.paper_combo.currentText() == "A3 Orizzontale":
+            if self.paper_combo.currentText() == "A3 Landscape":
                 legend.attemptMove(QgsLayoutPoint(209.9, 70, QgsUnitTypes.LayoutMillimeters))
                 legend.attemptResize(QgsLayoutSize(80, 30, QgsUnitTypes.LayoutMillimeters))
             else:
@@ -402,7 +442,7 @@ class LayoutGenerator(QDialog):
         # Overview map
         if self.include_overview.isChecked():
             overview = QgsLayoutItemMap(layout)
-            if self.paper_combo.currentText() == "A3 Orizzontale":
+            if self.paper_combo.currentText() == "A3 Landscape":
                 overview.setRect(246.39, 19.15, 44.55, 46.44)
             else:
                 overview.setRect(size[0] * 0.75, 20, size[0] * 0.2, size[1] * 0.25)
@@ -473,7 +513,7 @@ class LayoutGenerator(QDialog):
         profile_item = QgsLayoutItemElevationProfile(layout)
         
         # Set size and position
-        if self.paper_combo.currentText() == "A3 Orizzontale":
+        if self.paper_combo.currentText() == "A3 Landscape":
             profile_item.attemptMove(QgsLayoutPoint(3.99, 168.75, QgsUnitTypes.LayoutMillimeters))
             profile_item.attemptResize(QgsLayoutSize(287.19, 38.87, QgsUnitTypes.LayoutMillimeters))
         else:
@@ -579,7 +619,7 @@ class LayoutGenerator(QDialog):
             profile_pic.setPicturePath(profile_path)
             
             # Position at bottom of page
-            if self.paper_combo.currentText() == "A3 Orizzontale":
+            if self.paper_combo.currentText() == "A3 Landscape":
                 profile_pic.attemptMove(QgsLayoutPoint(3.99, 168.75, QgsUnitTypes.LayoutMillimeters))
                 profile_pic.attemptResize(QgsLayoutSize(287.19, 38.87, QgsUnitTypes.LayoutMillimeters))
             else:
@@ -643,21 +683,232 @@ class LayoutGenerator(QDialog):
     def export_pdf(self):
         if not self.current_layout:
             return
-            
-        file_path, _ = QFileDialog.getSaveFileName(self, "Esporta PDF", "", "PDF Files (*.pdf)")
+
+        # Check if Atlas is enabled
+        atlas = self.current_layout.atlas()
+        if atlas and atlas.enabled():
+            self.export_atlas_pdf()
+            return
+
+        file_path, _ = QFileDialog.getSaveFileName(self, "Export PDF", "", "PDF Files (*.pdf)")
         if file_path:
             exporter = QgsLayoutExporter(self.current_layout)
-            
+
             settings = QgsLayoutExporter.PdfExportSettings()
             settings.dpi = 300
             settings.rasterizeWholeImage = False
-            
+
             result = exporter.exportToPdf(file_path, settings)
-            
+
             if result == QgsLayoutExporter.Success:
-                QMessageBox.information(self, "Successo", "PDF esportato con successo!")
+                QMessageBox.information(self, "Success", "PDF exported successfully!")
             else:
-                QMessageBox.warning(self, "Errore", "Errore nell'esportazione del PDF")
+                QMessageBox.warning(self, "Error", "Error exporting PDF")
+
+    def export_atlas_pdf(self):
+        """Export Atlas to PDF (one page per section)"""
+        if not self.current_layout:
+            return
+
+        atlas = self.current_layout.atlas()
+        if not atlas or not atlas.enabled():
+            QMessageBox.warning(self, "Warning", "Atlas is not enabled")
+            return
+
+        file_path, _ = QFileDialog.getSaveFileName(self, "Export Atlas PDF", "", "PDF Files (*.pdf)")
+        if not file_path:
+            return
+
+        try:
+            exporter = QgsLayoutExporter(self.current_layout)
+
+            settings = QgsLayoutExporter.PdfExportSettings()
+            settings.dpi = 300
+            settings.rasterizeWholeImage = False
+
+            # Export all Atlas pages to single PDF
+            result = exporter.exportToPdf(atlas, file_path, settings)
+
+            if result == QgsLayoutExporter.Success:
+                feature_count = atlas.count()
+                QMessageBox.information(self, "Success",
+                    f"Atlas PDF exported successfully!\n\n"
+                    f"Pages: {feature_count}\n"
+                    f"File: {file_path}")
+            else:
+                QMessageBox.warning(self, "Error", f"Error exporting Atlas PDF: {result}")
+
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Error exporting Atlas: {str(e)}")
+
+    def generate_atlas_layout(self, raster_layer):
+        """Generate a layout with Atlas enabled for sections"""
+        try:
+            # Find the sections/profile layer
+            profile_layer = None
+            for layer in QgsProject.instance().mapLayers().values():
+                if layer.name() in ["Profili DEM", "Sections"] and isinstance(layer, QgsVectorLayer):
+                    if layer.featureCount() > 0:
+                        profile_layer = layer
+                        break
+
+            if not profile_layer:
+                QMessageBox.warning(self, "Warning",
+                    "No sections found.\n\n"
+                    "First create sections using the 'Create DEM Profile' tool or "
+                    "the 'Draw sections' button in Clip & Profile Export.")
+                return
+
+            feature_count = profile_layer.featureCount()
+            QgsMessageLog.logMessage(f"Found {feature_count} sections in {profile_layer.name()}", "ClipRasterLayout", Qgis.Info)
+
+            # Create layout
+            project = QgsProject.instance()
+            layout_name = f"Atlas_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
+            layout = QgsPrintLayout(project)
+            layout.initializeDefaults()
+            layout.setName(layout_name)
+
+            # Set page size
+            page = layout.pageCollection().page(0)
+            paper_sizes = {
+                "A4 Landscape": (297, 210),
+                "A3 Landscape": (420, 297),
+                "A2 Landscape": (594, 420),
+                "A1 Landscape": (841, 594)
+            }
+            size = paper_sizes.get(self.paper_combo.currentText(), (420, 297))
+            page.setPageSize(QgsLayoutSize(size[0], size[1], QgsUnitTypes.LayoutMillimeters))
+
+            # Configure Atlas
+            atlas = layout.atlas()
+            atlas.setCoverageLayer(profile_layer)
+            atlas.setEnabled(True)
+            atlas.setFilenameExpression("'Section_' || \"name\"")
+            atlas.setPageNameExpression("\"name\"")
+
+            # Main map - atlas driven
+            map_item = QgsLayoutItemMap(layout)
+            map_item.setRect(10, 40, size[0] * 0.65, size[1] * 0.5)
+            map_item.attemptMove(QgsLayoutPoint(10, 40, QgsUnitTypes.LayoutMillimeters))
+            map_item.attemptResize(QgsLayoutSize(size[0] * 0.65, size[1] * 0.5, QgsUnitTypes.LayoutMillimeters))
+            map_item.setExtent(raster_layer.extent())
+            map_item.setFrameEnabled(True)
+            map_item.setFrameStrokeWidth(QgsLayoutMeasurement(0.5, QgsUnitTypes.LayoutMillimeters))
+
+            # Configure map to follow Atlas feature
+            map_item.setAtlasDriven(True)
+            map_item.setAtlasScalingMode(QgsLayoutItemMap.Auto)
+            map_item.setAtlasMargin(self.atlas_margin.value() / 100.0)
+
+            layout.addLayoutItem(map_item)
+
+            # Title with Atlas expression
+            title = QgsLayoutItemLabel(layout)
+            title.setText(f"[% '{self.title_edit.text()}' %] - Section [% \"name\" %]")
+            title.setFont(QFont("Arial", 18, QFont.Bold))
+            title.setHAlign(Qt_AlignHCenter)
+            title.attemptMove(QgsLayoutPoint(10, 10, QgsUnitTypes.LayoutMillimeters))
+            title.attemptResize(QgsLayoutSize(size[0] - 20, 15, QgsUnitTypes.LayoutMillimeters))
+            layout.addLayoutItem(title)
+
+            # Section info label with Atlas expressions
+            info_label = QgsLayoutItemLabel(layout)
+            info_label.setText(
+                "Section: [% \"name\" %]\n"
+                "2D Length: [% round(\"length_2d\", 2) %] m\n"
+                "3D Length: [% round(\"length_3d\", 2) %] m\n"
+                "Elevation A: [% round(\"elev_a\", 1) %] m\n"
+                "Elevation B: [% round(\"elev_b\", 1) %] m\n"
+                "Elevation Change: [% round(\"elev_b\" - \"elev_a\", 1) %] m"
+            )
+            info_label.setFont(QFont("Arial", 10))
+            info_label.attemptMove(QgsLayoutPoint(size[0] * 0.7, 40, QgsUnitTypes.LayoutMillimeters))
+            info_label.attemptResize(QgsLayoutSize(size[0] * 0.25, 60, QgsUnitTypes.LayoutMillimeters))
+            info_label.setFrameEnabled(True)
+            info_label.setFrameStrokeWidth(QgsLayoutMeasurement(0.3, QgsUnitTypes.LayoutMillimeters))
+            layout.addLayoutItem(info_label)
+
+            # Profile image with Atlas expression for path
+            profile_pic = QgsLayoutItemPicture(layout)
+
+            # Get profile save directory
+            save_dir, _ = QgsProject.instance().readEntry("ClipRasterLayout", "profile_save_dir")
+            if save_dir:
+                # Use expression to get profile image based on section name
+                profile_pic.setDataDefinedProperty(
+                    QgsLayoutObject.PictureSource,
+                    QgsProperty.fromExpression(f"'{save_dir}/profile_' || \"name\" || '.png'")
+                )
+            else:
+                # Fallback to temp directory
+                import tempfile
+                temp_dir = tempfile.gettempdir()
+                profile_pic.setDataDefinedProperty(
+                    QgsLayoutObject.PictureSource,
+                    QgsProperty.fromExpression(f"'{temp_dir}/profile_' || \"name\" || '.png'")
+                )
+
+            profile_pic.attemptMove(QgsLayoutPoint(10, size[1] * 0.6, QgsUnitTypes.LayoutMillimeters))
+            profile_pic.attemptResize(QgsLayoutSize(size[0] - 20, size[1] * 0.3, QgsUnitTypes.LayoutMillimeters))
+            profile_pic.setFrameEnabled(True)
+            profile_pic.setFrameStrokeWidth(QgsLayoutMeasurement(0.5, QgsUnitTypes.LayoutMillimeters))
+            profile_pic.setResizeMode(QgsLayoutItemPicture.Zoom)
+            layout.addLayoutItem(profile_pic)
+
+            # North arrow
+            if self.include_north.isChecked():
+                north = QgsLayoutItemPicture(layout)
+                north.setMode(QgsLayoutItemPicture.FormatSVG)
+                north.setPicturePath(":/images/north_arrows/layout_default_north_arrow.svg")
+                north.attemptMove(QgsLayoutPoint(size[0] - 30, 40, QgsUnitTypes.LayoutMillimeters))
+                north.attemptResize(QgsLayoutSize(15, 20, QgsUnitTypes.LayoutMillimeters))
+                north.setFrameEnabled(True)
+                layout.addLayoutItem(north)
+
+            # Scale bar
+            if self.include_scale.isChecked():
+                scalebar = QgsLayoutItemScaleBar(layout)
+                scalebar.setLinkedMap(map_item)
+                scalebar.setUnits(QgsUnitTypes.DistanceMeters)
+                scalebar.setNumberOfSegments(4)
+                scalebar.setStyle('Single Box')
+                scalebar.attemptMove(QgsLayoutPoint(10, size[1] * 0.55, QgsUnitTypes.LayoutMillimeters))
+                scalebar.setFrameEnabled(True)
+                layout.addLayoutItem(scalebar)
+
+            # Metadata
+            if self.include_metadata.isChecked():
+                metadata_label = QgsLayoutItemLabel(layout)
+                metadata_label.setText(
+                    f"Date: {datetime.now().strftime('%d/%m/%Y')}\n"
+                    f"CRS: {raster_layer.crs().authid()}\n"
+                    f"Author: {self.author_edit.text() or 'N/A'}\n"
+                    f"Page: [% @atlas_featurenumber %] / [% @atlas_totalfeatures %]"
+                )
+                metadata_label.setFont(QFont("Arial", 8))
+                metadata_label.attemptMove(QgsLayoutPoint(size[0] * 0.7, size[1] - 40, QgsUnitTypes.LayoutMillimeters))
+                metadata_label.attemptResize(QgsLayoutSize(size[0] * 0.25, 30, QgsUnitTypes.LayoutMillimeters))
+                layout.addLayoutItem(metadata_label)
+
+            # Add layout to project
+            project.layoutManager().addLayout(layout)
+
+            self.current_layout = layout
+            self.export_button.setEnabled(True)
+
+            # Open layout designer
+            self.iface.openLayoutDesigner(layout)
+
+            QMessageBox.information(self, "Success",
+                f"Atlas layout created with {feature_count} sections!\n\n"
+                f"The map will automatically zoom to each section.\n"
+                f"Click 'Export PDF' to generate all pages.")
+
+        except Exception as e:
+            QgsMessageLog.logMessage(f"Error creating Atlas layout: {str(e)}", "ClipRasterLayout", Qgis.Critical)
+            QMessageBox.warning(self, "Error", f"Error creating Atlas layout: {str(e)}")
     
     def load_template_layout(self, template_path, layout_name):
         """Load layout from template file"""
@@ -719,34 +970,58 @@ class LayoutGenerator(QDialog):
     def populate_template_layout(self, layout, raster_layer):
         """Populate the template layout with data"""
         try:
-            # Update main map on first page
+            # Find and update maps
             main_map = None
-            for item in layout.items():
-                if isinstance(item, QgsLayoutItemMap) and item.page() == 0:
-                    main_map = item
-                    # Assuming the first map is the main map
-                    extent = raster_layer.extent()
-                    
-                    # Check if we need to include profile lines
-                    profile_layer = None
-                    for layer in QgsProject.instance().mapLayers().values():
-                        if layer.name() == "Profili DEM":
-                            profile_layer = layer
-                            # Expand extent to include all profiles
-                            profile_extent = layer.extent()
-                            if not profile_extent.isEmpty():
-                                extent.combineExtentWith(profile_extent)
-                            break
-                    
-                    # Add 10% buffer
-                    extent = extent.buffered(extent.width() * 0.1)
-                    item.setExtent(extent)
-                    item.refresh()
-                    break
+            overview_map = None
             
-            # Add labels for section endpoints
-            if profile_layer and main_map:
-                self.add_section_labels(layout, profile_layer, main_map)
+            # Find all maps and identify them
+            for item in layout.items():
+                if isinstance(item, QgsLayoutItemMap):
+                    item_id = item.id()
+                    QgsMessageLog.logMessage(f"Found map with ID: '{item_id}' on page {item.page()}, size: {item.rect().width()}x{item.rect().height()}", "ClipRasterLayout", Qgis.Info)
+                    
+                    # Check by ID
+                    if item_id.lower() == "map":
+                        main_map = item
+                        QgsMessageLog.logMessage("Identified as main map by ID", "ClipRasterLayout", Qgis.Info)
+                    elif item_id.lower() == "map2" or "overview" in item_id.lower():
+                        overview_map = item
+                        QgsMessageLog.logMessage("Identified as overview map by ID", "ClipRasterLayout", Qgis.Info)
+                    # If no clear ID, use size heuristic on page 0
+                    elif item.page() == 0:
+                        if item.rect().width() > 150:  # Larger maps are usually main maps
+                            if not main_map:
+                                main_map = item
+                                QgsMessageLog.logMessage("Identified as main map by size", "ClipRasterLayout", Qgis.Info)
+                        else:
+                            if not overview_map:
+                                overview_map = item
+                                QgsMessageLog.logMessage("Identified as overview map by size", "ClipRasterLayout", Qgis.Info)
+            
+            # Update main map
+            if main_map:
+                extent = raster_layer.extent()
+                
+                # Check if we need to include profile lines
+                profile_layer = None
+                for layer in QgsProject.instance().mapLayers().values():
+                    if layer.name() == "Profili DEM":
+                        profile_layer = layer
+                        # Expand extent to include all profiles
+                        profile_extent = layer.extent()
+                        if not profile_extent.isEmpty():
+                            extent.combineExtentWith(profile_extent)
+                        break
+                
+                # Add 10% buffer
+                extent = extent.buffered(extent.width() * 0.1)
+                main_map.setExtent(extent)
+                main_map.refresh()
+                
+                # Add labels for section endpoints on MAIN MAP
+                if profile_layer:
+                    self.add_section_labels(layout, profile_layer, main_map)
+                    QgsMessageLog.logMessage("Added section labels to main map", "ClipRasterLayout", Qgis.Info)
             
             # Update text labels
             for item in layout.items():
@@ -789,13 +1064,13 @@ class LayoutGenerator(QDialog):
             # Find elevation profile items on page 2
             profile_items = []
             
-            # Since the template might not have native elevation profiles,
-            # we should check for picture items that might be placeholders
+            # Look for elevation profile items on page 2
             for item in layout.items():
                 if HAS_ELEVATION_PROFILE and isinstance(item, QgsLayoutItemElevationProfile):
                     # Check if it's on page 2
                     if item.page() == 1:  # Page index starts at 0
                         profile_items.append(item)
+                        QgsMessageLog.logMessage(f"Found elevation profile item: {item.id()} at position {item.positionWithUnits()}", "ClipRasterLayout", Qgis.Info)
                         
             # If no elevation profile items found, look for picture placeholders
             if not profile_items:
@@ -850,53 +1125,72 @@ class LayoutGenerator(QDialog):
                 return
             
             QgsMessageLog.logMessage(f"Found {len(profile_items)} elevation profile items on page 2", "ClipRasterLayout", Qgis.Info)
+            QgsMessageLog.logMessage(f"Have {len(profile_features)} profile features to populate", "ClipRasterLayout", Qgis.Info)
+            
+            # Sort profile items by position (top to bottom, left to right)
+            profile_items.sort(key=lambda x: (x.positionWithUnits().y(), x.positionWithUnits().x()))
             
             # Populate profiles
-            for i, (profile_item, profile_feature) in enumerate(zip(profile_items, profile_features)):
+            for i, profile_feature in enumerate(profile_features):
+                if i >= len(profile_items):
+                    QgsMessageLog.logMessage(f"No more profile items available for feature {i+1}", "ClipRasterLayout", Qgis.Warning)
+                    break
+                    
+                profile_item = profile_items[i]
                 try:
                     profile_name = profile_feature['name']
                     
-                    # Try to copy from the elevation profile dock
-                    try:
-                        # Get the main elevation profile dock
-                        profile_dock = None
-                        for dock in self.iface.mainWindow().findChildren(QDockWidget):
-                            if 'elevation' in dock.windowTitle().lower() and 'profile' in dock.windowTitle().lower():
+                    # Check if this profile was marked as ready
+                    profile_ready, _ = QgsProject.instance().readEntry("ClipRasterLayout", f"profile_ready_{profile_name}")
+                    
+                    if profile_ready == "yes":
+                        QgsMessageLog.logMessage(f"Profile {profile_name} was marked as ready", "ClipRasterLayout", Qgis.Info)
+                    
+                    # Try to find the specific elevation profile dock for this profile
+                    profile_dock = None
+                    for dock in self.iface.mainWindow().findChildren(QDockWidget):
+                        dock_title = dock.windowTitle()
+                        if 'elevation' in dock_title.lower() and 'profile' in dock_title.lower():
+                            # Check if this is the dock for our specific profile
+                            if profile_name in dock_title:
                                 profile_dock = dock
+                                QgsMessageLog.logMessage(f"Found specific dock for {profile_name}", "ClipRasterLayout", Qgis.Info)
                                 break
-                        
-                        if profile_dock and profile_dock.isVisible():
-                            # Try to use copyProfileFromExisting if available
-                            if hasattr(profile_item, 'copyFromProfileWidget'):
-                                profile_item.copyFromProfileWidget(profile_dock)
-                                QgsMessageLog.logMessage(f"Copied profile {i+1} from elevation profile widget", "ClipRasterLayout", Qgis.Info)
+                            # If no specific dock found, use any elevation profile dock
+                            elif not profile_dock:
+                                profile_dock = dock
+                    
+                    if profile_dock and profile_dock.isVisible():
+                        try:
+                            # Get the elevation profile canvas from the dock
+                            elevation_canvas = None
+                            for widget in profile_dock.findChildren(QWidget):
+                                if hasattr(widget, 'plotItem') or hasattr(widget, 'plot'):
+                                    elevation_canvas = widget
+                                    break
+                            
+                            if elevation_canvas:
+                                # Try to use copyFromProfileCanvas if available
+                                if hasattr(profile_item, 'copyFromProfileCanvas'):
+                                    profile_item.copyFromProfileCanvas(elevation_canvas)
+                                    QgsMessageLog.logMessage(f"Copied profile {profile_name} using copyFromProfileCanvas", "ClipRasterLayout", Qgis.Info)
+                                elif hasattr(profile_item, 'copyFromProfileWidget'):
+                                    profile_item.copyFromProfileWidget(elevation_canvas)
+                                    QgsMessageLog.logMessage(f"Copied profile {profile_name} using copyFromProfileWidget", "ClipRasterLayout", Qgis.Info)
+                                else:
+                                    # Fallback: set the curve manually
+                                    self.setup_profile_item_manually(profile_item, profile_feature)
+                                    QgsMessageLog.logMessage(f"Set profile {profile_name} manually (no copy method available)", "ClipRasterLayout", Qgis.Info)
                             else:
-                                # Fallback: set the curve manually
-                                profile_item.setProfileCurve(profile_feature.geometry())
-                                QgsMessageLog.logMessage(f"Set profile curve manually for {i+1}", "ClipRasterLayout", Qgis.Info)
-                        else:
-                            # No profile dock, set curve manually
-                            profile_item.setProfileCurve(profile_feature.geometry())
-                            
-                            # Find DEM layer
-                            dem_layer = None
-                            for layer in QgsProject.instance().mapLayers().values():
-                                if isinstance(layer, QgsRasterLayer) and layer.bandCount() == 1:
-                                    if 'dem' in layer.name().lower() or 'dtm' in layer.name().lower():
-                                        dem_layer = layer
-                                        break
-                            
-                            if dem_layer:
-                                try:
-                                    layers = profile_item.layers()
-                                    layers.setLayerEnabled(dem_layer, True)
-                                except AttributeError:
-                                    QgsMessageLog.logMessage(f"Could not set layer for profile {i+1}", "ClipRasterLayout", Qgis.Warning)
-                                    
-                    except Exception as e:
-                        QgsMessageLog.logMessage(f"Error copying from profile dock: {str(e)}", "ClipRasterLayout", Qgis.Warning)
-                        # Fallback to setting curve
-                        profile_item.setProfileCurve(profile_feature.geometry())
+                                self.setup_profile_item_manually(profile_item, profile_feature)
+                                QgsMessageLog.logMessage(f"Could not find elevation canvas in dock for {profile_name}", "ClipRasterLayout", Qgis.Warning)
+                        except Exception as e:
+                            QgsMessageLog.logMessage(f"Error copying from profile dock: {str(e)}", "ClipRasterLayout", Qgis.Warning)
+                            self.setup_profile_item_manually(profile_item, profile_feature)
+                    else:
+                        # No profile dock found or not visible, set curve manually
+                        QgsMessageLog.logMessage(f"No visible profile dock for {profile_name}, setting up manually", "ClipRasterLayout", Qgis.Info)
+                        self.setup_profile_item_manually(profile_item, profile_feature)
                     
                     # Update title if it's a label
                     # Look for associated label
@@ -911,13 +1205,60 @@ class LayoutGenerator(QDialog):
                 except Exception as e:
                     QgsMessageLog.logMessage(f"Error setting profile {i+1}: {str(e)}", "ClipRasterLayout", Qgis.Warning)
             
-            # Hide unused profile items
+            # Hide or remove unused profile items (max 6 profiles)
             for i in range(len(profile_features), len(profile_items)):
                 profile_items[i].setVisibility(False)
                 QgsMessageLog.logMessage(f"Hidden unused profile {i+1}", "ClipRasterLayout", Qgis.Info)
                 
         except Exception as e:
             QgsMessageLog.logMessage(f"Error populating elevation profiles: {str(e)}", "ClipRasterLayout", Qgis.Critical)
+    
+    def setup_profile_item_manually(self, profile_item, profile_feature):
+        """Manually setup elevation profile item when dock copy is not available"""
+        try:
+            # Set the profile curve
+            profile_item.setProfileCurve(profile_feature.geometry().constGet())
+            
+            # Find DEM layer
+            dem_layer = None
+            for layer in QgsProject.instance().mapLayers().values():
+                if isinstance(layer, QgsRasterLayer) and layer.bandCount() == 1:
+                    if 'dem' in layer.name().lower() or 'dtm' in layer.name().lower() or 'elevation' in layer.name().lower():
+                        dem_layer = layer
+                        break
+            
+            # If no DEM found by name, use the first single-band raster
+            if not dem_layer:
+                for layer in QgsProject.instance().mapLayers().values():
+                    if isinstance(layer, QgsRasterLayer) and layer.bandCount() == 1:
+                        dem_layer = layer
+                        break
+            
+            if dem_layer:
+                try:
+                    # Try newer API
+                    layers = profile_item.layers()
+                    layers.setLayerEnabled(dem_layer, True)
+                except AttributeError:
+                    try:
+                        # Try older API
+                        layers = profile_item.profileLayers()
+                        layer_settings = layers.profileLayerSettings(dem_layer.id())
+                        if layer_settings:
+                            layer_settings.setEnabled(True)
+                            layers.setProfileLayerSettings(dem_layer.id(), layer_settings)
+                    except:
+                        QgsMessageLog.logMessage(f"Could not configure layers for profile", "ClipRasterLayout", Qgis.Warning)
+                        
+            # Set display options
+            try:
+                profile_item.setPlotArea(profile_item.rect())
+                profile_item.refresh()
+            except:
+                pass
+                
+        except Exception as e:
+            QgsMessageLog.logMessage(f"Error setting up profile manually: {str(e)}", "ClipRasterLayout", Qgis.Warning)
     
     def add_section_labels(self, layout, profile_layer, map_item):
         """Add labels at the endpoints of sections on the map"""
@@ -942,34 +1283,75 @@ class LayoutGenerator(QDialog):
                         start_layout = map_item.mapToItemCoords(QPointF(start_point.x(), start_point.y()))
                         end_layout = map_item.mapToItemCoords(QPointF(end_point.x(), end_point.y()))
                         
-                        # Create start label
+                        # Create start label with circular white background
                         start_label = QgsLayoutItemLabel(layout)
-                        start_label.setText(f"→ {start_letter}")
-                        start_label.setFont(QFont("Arial", 10, QFont.Bold))
+                        start_label.setText(f"{start_letter}")
+                        start_label.setFont(QFont("Arial", 12, QFont.Bold))
                         
-                        # Position relative to map item
+                        # Set white circular background
+                        start_label.setBackgroundEnabled(True)
+                        start_label.setBackgroundColor(QColor(255, 255, 255))  # White background
+                        start_label.setFrameEnabled(True)
+                        start_label.setFrameStrokeColor(QColor(0, 0, 0))  # Black border
+                        start_label.setFrameStrokeWidth(QgsLayoutMeasurement(0.5, QgsUnitTypes.LayoutMillimeters))
+                        
+                        # Center text alignment
+                        start_label.setHAlign(Qt.AlignHCenter)
+                        start_label.setVAlign(Qt.AlignVCenter)
+                        start_label.setMarginX(0)
+                        start_label.setMarginY(0)
+                        
+                        # Position relative to map item - circular size
+                        label_size = 8  # Size for circular label in mm
                         start_pos = QgsLayoutPoint(
-                            map_item.positionWithUnits().x() + start_layout.x() - 5,
-                            map_item.positionWithUnits().y() + start_layout.y() - 5,
+                            map_item.positionWithUnits().x() + start_layout.x() - label_size/2,
+                            map_item.positionWithUnits().y() + start_layout.y() - label_size/2,
                             QgsUnitTypes.LayoutMillimeters
                         )
                         start_label.attemptMove(start_pos)
-                        start_label.attemptResize(QgsLayoutSize(10, 10, QgsUnitTypes.LayoutMillimeters))
+                        start_label.attemptResize(QgsLayoutSize(label_size, label_size, QgsUnitTypes.LayoutMillimeters))
+                        
+                        # Try to set rounded corners
+                        try:
+                            start_label.setFrameJoinStyle(Qt.RoundJoin)
+                        except:
+                            pass
+                        
                         layout.addLayoutItem(start_label)
                         
-                        # Create end label
+                        # Create end label with circular white background
                         end_label = QgsLayoutItemLabel(layout)
-                        end_label.setText(f"{end_letter} ←")
-                        end_label.setFont(QFont("Arial", 10, QFont.Bold))
+                        end_label.setText(f"{end_letter}")
+                        end_label.setFont(QFont("Arial", 12, QFont.Bold))
                         
-                        # Position relative to map item
+                        # Set white circular background
+                        end_label.setBackgroundEnabled(True)
+                        end_label.setBackgroundColor(QColor(255, 255, 255))  # White background
+                        end_label.setFrameEnabled(True)
+                        end_label.setFrameStrokeColor(QColor(0, 0, 0))  # Black border
+                        end_label.setFrameStrokeWidth(QgsLayoutMeasurement(0.5, QgsUnitTypes.LayoutMillimeters))
+                        
+                        # Center text alignment
+                        end_label.setHAlign(Qt.AlignHCenter)
+                        end_label.setVAlign(Qt.AlignVCenter)
+                        end_label.setMarginX(0)
+                        end_label.setMarginY(0)
+                        
+                        # Position relative to map item - circular size
                         end_pos = QgsLayoutPoint(
-                            map_item.positionWithUnits().x() + end_layout.x() - 5,
-                            map_item.positionWithUnits().y() + end_layout.y() - 5,
+                            map_item.positionWithUnits().x() + end_layout.x() - label_size/2,
+                            map_item.positionWithUnits().y() + end_layout.y() - label_size/2,
                             QgsUnitTypes.LayoutMillimeters
                         )
                         end_label.attemptMove(end_pos)
-                        end_label.attemptResize(QgsLayoutSize(10, 10, QgsUnitTypes.LayoutMillimeters))
+                        end_label.attemptResize(QgsLayoutSize(label_size, label_size, QgsUnitTypes.LayoutMillimeters))
+                        
+                        # Try to set rounded corners
+                        try:
+                            end_label.setFrameJoinStyle(Qt.RoundJoin)
+                        except:
+                            pass
+                        
                         layout.addLayoutItem(end_label)
                         
                         QgsMessageLog.logMessage(f"Added labels for section {profile_name}", "ClipRasterLayout", Qgis.Info)
