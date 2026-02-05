@@ -17,12 +17,25 @@ about=A comprehensive QGIS plugin for topographic analysis that provides:
 
     Compatible with QGIS 3.x (Qt5) and QGIS 4.x (Qt6).
 
-tracker=https://github.com/enzo-ccc/clip-raster-layout/issues
-repository=https://github.com/enzo-ccc/clip-raster-layout
+tracker=https://github.com/enzococca/clip_raster_layout
+repository=https://github.com/enzococca/clip_raster_layout
 tags=raster,clip,dem,profile,elevation,topography,section,batch,mask
-homepage=https://github.com/enzo-ccc/clip-raster-layout
+homepage=https://github.com/enzococca/clip_raster_layout
 category=Raster
 icon=icon.png
 experimental=False
 deprecated=False
 hasProcessingProvider=no
+
+changelog=1.1.0
+    - Atlas layout with adaptive scale to section line
+    - Professional A3 layout: map 250x110mm, profile 390x125mm
+    - Elevation profile with QgsDistanceArea (geographic CRS support)
+    - Qt5/Qt6 full compatibility
+    - Auto-refresh layer lists
+    - Interactive polygon drawing tool
+    - Built-in tutorial
+    1.0.0
+    - Initial release
+    - Batch raster clipping
+    - Section profiles with elevation charts

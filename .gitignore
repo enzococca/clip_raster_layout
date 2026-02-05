@@ -61,3 +61,4 @@ coverage.xml
 # QGIS plugin specific
 *.qgz
 *.qgs~
+/.claude/
