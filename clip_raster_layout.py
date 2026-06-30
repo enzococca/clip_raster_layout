@@ -3,19 +3,19 @@
 # Compatible with QGIS 3.x (Qt5) and QGIS 4.x (Qt6)
 # -----------------------------------------------------------------------------
 from qgis.PyQt import QtWidgets, QtCore, QtGui
-from qgis.PyQt.QtCore import QVariant, QRectF
+from qgis.PyQt.QtCore import QVariant
 from qgis.PyQt.QtGui import QFont, QColor
 from qgis.core import (
-    QgsProject, QgsMapLayer, QgsWkbTypes, QgsLayoutExporter,
-    QgsPrintLayout, QgsLayoutItemMap, QgsLayoutItemLabel,
-    QgsLayoutItemPicture, QgsLayoutItemScaleBar, QgsUnitTypes,
-    QgsVectorLayer, QgsField, QgsFeature, QgsGeometry, QgsPointXY,
-    QgsLineSymbol, QgsMarkerLineSymbolLayer, QgsSimpleMarkerSymbolLayer,
-    QgsPalLayerSettings, QgsTextFormat, QgsVectorLayerSimpleLabeling,
-    QgsFillSymbol, QgsSimpleFillSymbolLayer
+    QgsProject, QgsMapLayer, QgsWkbTypes, QgsVectorLayer,
+    QgsField, QgsFeature, QgsGeometry,
+    QgsPointXY, QgsLineSymbol, QgsMarkerLineSymbolLayer,
+    QgsSimpleMarkerSymbolLayer, QgsPalLayerSettings, QgsTextFormat, QgsVectorLayerSimpleLabeling, QgsFillSymbol
 )
 from qgis.gui import QgsMapTool, QgsRubberBand
-import processing, os, tempfile, numpy as np, matplotlib.pyplot as plt
+import processing
+import os
+import numpy as np
+import matplotlib.pyplot as plt
 
 # Qt5/Qt6 compatibility layer
 try:
@@ -56,7 +56,8 @@ class ClipRasterLayoutPlugin:
 
     def initGui(self):
         icon = QtGui.QIcon(os.path.join(os.path.dirname(__file__), 'icon.png'))
-        self.action = QtWidgets.QAction(icon, 'Clip & Profile Layout', self.iface.mainWindow())
+        self.action = QtWidgets.QAction(
+            icon, 'Clip & Profile Layout', self.iface.mainWindow())
         self.action.triggered.connect(self.run)
         self.iface.addToolBarIcon(self.action)
         self.iface.addPluginToMenu('Clip Raster & Profile', self.action)
@@ -82,7 +83,6 @@ class ClipRasterLayoutPlugin:
             # 1) Clip rasters
             cropped = []
             clipped_layers = []
-            total = len(rasters)
 
             for i, r in enumerate(rasters):
                 try:
@@ -104,26 +104,26 @@ class ClipRasterLayoutPlugin:
                         QgsProject.instance().addMapLayer(clipped)
                         clipped_layers.append(clipped)
                 except Exception as e:
-                    QtWidgets.QMessageBox.warning(None, 'Warning', f'Error clipping {r.name()}: {str(e)}')
+                    QtWidgets.QMessageBox.warning(
+                        None, 'Warning', f'Error clipping {r.name()}: {str(e)}')
 
             # 2) Generate profiles (only if sections are provided)
             profiles = []
-            last_png = None
 
             if sections is not None and sections.isValid() and sections.featureCount() > 0:
                 # Find the first raster to use for elevation sampling
                 dem_provider = None
-                dem_crs = None
                 if rasters:
                     dem_provider = rasters[0].dataProvider()
-                    dem_crs = rasters[0].crs()
 
                 if dem_provider:
                     # Setup distance calculator for accurate measurements
                     from qgis.core import QgsDistanceArea, QgsCoordinateTransformContext
                     distance_calc = QgsDistanceArea()
-                    distance_calc.setSourceCrs(sections.crs(), QgsCoordinateTransformContext())
-                    distance_calc.setEllipsoid(QgsProject.instance().ellipsoid())
+                    distance_calc.setSourceCrs(
+                        sections.crs(), QgsCoordinateTransformContext())
+                    distance_calc.setEllipsoid(
+                        QgsProject.instance().ellipsoid())
 
                     for feat in sections.getFeatures():
                         try:
@@ -155,7 +155,8 @@ class ClipRasterLayoutPlugin:
                             elev = []
                             valid_elevations = 0
                             for p in pts:
-                                val = dem_provider.sample(QgsPointXY(p.x(), p.y()), 1)
+                                val = dem_provider.sample(
+                                    QgsPointXY(p.x(), p.y()), 1)
                                 if val[0] is not None and val[0] != 0:
                                     elev.append(float(val[0]))
                                     valid_elevations += 1
@@ -165,7 +166,8 @@ class ClipRasterLayoutPlugin:
                                     elev.append(0.0)
 
                             if len(elev) < 2 or valid_elevations < 2:
-                                print(f"Section {label}: Not enough valid elevations ({valid_elevations})")
+                                print(
+                                    f"Section {label}: Not enough valid elevations ({valid_elevations})")
                                 continue
 
                             # Use true distance in meters for x-axis
@@ -183,16 +185,20 @@ class ClipRasterLayoutPlugin:
                             # Add some padding to y-axis
                             elev_range = max(elev) - min(elev)
                             if elev_range > 0:
-                                plt.ylim(min(elev) - elev_range * 0.1, max(elev) + elev_range * 0.1)
+                                plt.ylim(min(elev) - elev_range * 0.1,
+                                         max(elev) + elev_range * 0.1)
 
-                            png = os.path.join(output_dir, f"profile_{label}.png")
+                            png = os.path.join(
+                                output_dir, f"profile_{label}.png")
                             fig.savefig(png, dpi=150, bbox_inches='tight')
                             plt.close(fig)
-                            profiles.append((label, png, dist[-1], elev[-1] - elev[0]))
-                            last_png = png
-                            print(f"Section {label}: Length={length_meters:.1f}m, Points={len(pts)}, Elevations={valid_elevations}")
+                            profiles.append(
+                                (label, png, dist[-1], elev[-1] - elev[0]))
+                            print(
+                                f"Section {label}: Length={length_meters:.1f}m, Points={len(pts)}, Elevations={valid_elevations}")
                         except Exception as e:
-                            print(f"Error processing section {label}: {str(e)}")
+                            print(
+                                f"Error processing section {label}: {str(e)}")
                             import traceback
                             traceback.print_exc()
                             continue
@@ -200,7 +206,7 @@ class ClipRasterLayoutPlugin:
                 sections.commitChanges()
 
             # 3) Build result message
-            msg = f"Clipping completed!\n\n"
+            msg = "Clipping completed!\n\n"
             msg += f"Clipped rasters: {len(cropped)}\n"
             msg += f"Output folder: {output_dir}"
 
@@ -210,7 +216,8 @@ class ClipRasterLayoutPlugin:
             QtWidgets.QMessageBox.information(None, 'Done', msg)
 
         except Exception as e:
-            QtWidgets.QMessageBox.critical(None, 'Error', f'Processing error: {str(e)}')
+            QtWidgets.QMessageBox.critical(
+                None, 'Error', f'Processing error: {str(e)}')
 
 
 class ClipDockWidget(QtWidgets.QDockWidget):
@@ -272,7 +279,8 @@ class ClipDockWidget(QtWidgets.QDockWidget):
         sec_group = QtWidgets.QGroupBox('3. Sections (optional)')
         sec_layout = QtWidgets.QVBoxLayout()
 
-        self.createSectionsCheck = QtWidgets.QCheckBox('Create sections/profiles')
+        self.createSectionsCheck = QtWidgets.QCheckBox(
+            'Create sections/profiles')
         self.createSectionsCheck.setChecked(False)
         self.createSectionsCheck.stateChanged.connect(self.toggleSectionsUI)
         sec_layout.addWidget(self.createSectionsCheck)
@@ -306,7 +314,8 @@ class ClipDockWidget(QtWidgets.QDockWidget):
 
         # Run Clip button
         self.runBtn = QtWidgets.QPushButton('Run Clip')
-        self.runBtn.setStyleSheet('QPushButton { background-color: #4CAF50; color: white; font-weight: bold; padding: 8px; }')
+        self.runBtn.setStyleSheet(
+            'QPushButton { background-color: #4CAF50; color: white; font-weight: bold; padding: 8px; }')
         self.runBtn.clicked.connect(self.emitProcess)
         v.addWidget(self.runBtn)
 
@@ -314,9 +323,11 @@ class ClipDockWidget(QtWidgets.QDockWidget):
         layout_group = QtWidgets.QGroupBox('5. Generate Layout (Atlas)')
         layout_layout = QtWidgets.QVBoxLayout()
 
-        self.atlasCheck = QtWidgets.QCheckBox('Enable Atlas (one page per section)')
+        self.atlasCheck = QtWidgets.QCheckBox(
+            'Enable Atlas (one page per section)')
         self.atlasCheck.setChecked(True)
-        self.atlasCheck.setToolTip('Generate one PDF page per section with automatic map extent')
+        self.atlasCheck.setToolTip(
+            'Generate one PDF page per section with automatic map extent')
         layout_layout.addWidget(self.atlasCheck)
 
         margin_h = QtWidgets.QHBoxLayout()
@@ -330,7 +341,8 @@ class ClipDockWidget(QtWidgets.QDockWidget):
         layout_layout.addLayout(margin_h)
 
         self.generateLayoutBtn = QtWidgets.QPushButton('Generate Atlas Layout')
-        self.generateLayoutBtn.setStyleSheet('QPushButton { background-color: #2196F3; color: white; font-weight: bold; padding: 8px; }')
+        self.generateLayoutBtn.setStyleSheet(
+            'QPushButton { background-color: #2196F3; color: white; font-weight: bold; padding: 8px; }')
         self.generateLayoutBtn.clicked.connect(self.generateAtlasLayout)
         layout_layout.addWidget(self.generateLayoutBtn)
 
@@ -409,12 +421,14 @@ class ClipDockWidget(QtWidgets.QDockWidget):
         if layer:
             tool = PolygonDrawTool(self.iface.mapCanvas(), layer, self)
             self.iface.mapCanvas().setMapTool(tool)
-            self.updateStatus('Click on the map to draw the polygon. Double-click to finish.')
+            self.updateStatus(
+                'Click on the map to draw the polygon. Double-click to finish.')
 
     def _createClipPolygonLayer(self):
         """Create a memory layer for clip polygons"""
         crs = QgsProject.instance().crs().authid() or 'EPSG:4326'
-        layer = QgsVectorLayer(f'Polygon?crs={crs}&field=name:string', 'Clip Polygon', 'memory')
+        layer = QgsVectorLayer(
+            f'Polygon?crs={crs}&field=name:string', 'Clip Polygon', 'memory')
 
         # Style with semi-transparent fill
         symbol = QgsFillSymbol.createSimple({
@@ -445,7 +459,8 @@ class ClipDockWidget(QtWidgets.QDockWidget):
         """Create or recreate the sections memory layer"""
         try:
             crs = QgsProject.instance().crs().authid() or 'EPSG:4326'
-            sections = QgsVectorLayer(f'LineString?crs={crs}', 'Sections', 'memory')
+            sections = QgsVectorLayer(
+                f'LineString?crs={crs}', 'Sections', 'memory')
             dp = sections.dataProvider()
             dp.addAttributes([QgsField('label', QVariant.String)])
             sections.updateFields()
@@ -454,17 +469,20 @@ class ClipDockWidget(QtWidgets.QDockWidget):
             sections.startEditing()
 
             # styling
-            sym = QgsLineSymbol.createSimple({'line_style': 'dash', 'line_color': '0,0,0', 'line_width': '0.6'})
+            sym = QgsLineSymbol.createSimple(
+                {'line_style': 'dash', 'line_color': '0,0,0', 'line_width': '0.6'})
             m1 = QgsMarkerLineSymbolLayer()
             m1.setPlacement(QgsMarkerLineSymbolLayer.FirstVertex)
             m1.setRotateMarker(True)
-            arr1 = QgsSimpleMarkerSymbolLayer.create({'name': 'arrowhead', 'size': '4', 'color': '0,0,0'})
+            arr1 = QgsSimpleMarkerSymbolLayer.create(
+                {'name': 'arrowhead', 'size': '4', 'color': '0,0,0'})
             m1.subSymbol().changeSymbolLayer(0, arr1)
             sym.appendSymbolLayer(m1)
             m2 = QgsMarkerLineSymbolLayer()
             m2.setPlacement(QgsMarkerLineSymbolLayer.LastVertex)
             m2.setRotateMarker(True)
-            arr2 = QgsSimpleMarkerSymbolLayer.create({'name': 'arrowhead', 'size': '4', 'color': '0,0,0'})
+            arr2 = QgsSimpleMarkerSymbolLayer.create(
+                {'name': 'arrowhead', 'size': '4', 'color': '0,0,0'})
             m2.subSymbol().changeSymbolLayer(0, arr2)
             sym.appendSymbolLayer(m2)
             sections.renderer().setSymbol(sym)
@@ -483,7 +501,8 @@ class ClipDockWidget(QtWidgets.QDockWidget):
             sections.setLabelsEnabled(True)
             sections.triggerRepaint()
         except Exception as e:
-            QtWidgets.QMessageBox.warning(None, 'Error', f'Error creating sections layer: {str(e)}')
+            QtWidgets.QMessageBox.warning(
+                None, 'Error', f'Error creating sections layer: {str(e)}')
 
     def _getSectionsLayer(self):
         """Get the sections layer, recreating it if it was deleted"""
@@ -511,7 +530,8 @@ class ClipDockWidget(QtWidgets.QDockWidget):
             self.updateStatus('Click two points to define a section')
 
     def chooseFolder(self):
-        d = QtWidgets.QFileDialog.getExistingDirectory(self, 'Select output folder')
+        d = QtWidgets.QFileDialog.getExistingDirectory(
+            self, 'Select output folder')
         if d:
             self.outEdit.setText(d)
 
@@ -523,32 +543,37 @@ class ClipDockWidget(QtWidgets.QDockWidget):
         ras = [r for r in ras if r is not None]  # Filter out None values
 
         if not ras:
-            QtWidgets.QMessageBox.warning(self, 'Warning', 'Select at least one raster to clip.')
+            QtWidgets.QMessageBox.warning(
+                self, 'Warning', 'Select at least one raster to clip.')
             return
 
         # Validate polygon
         poly_id = self.pCombo.currentData()
         if not poly_id:
-            QtWidgets.QMessageBox.warning(self, 'Warning', 'Select a clip polygon.')
+            QtWidgets.QMessageBox.warning(
+                self, 'Warning', 'Select a clip polygon.')
             return
 
         poly = QgsProject.instance().mapLayer(poly_id)
         if poly is None:
-            QtWidgets.QMessageBox.warning(self, 'Warning', 'The selected polygon is no longer available.')
+            QtWidgets.QMessageBox.warning(
+                self, 'Warning', 'The selected polygon is no longer available.')
             self.refreshPolygonList()
             return
 
         # Validate output folder
         out = self.outEdit.text()
         if not out:
-            QtWidgets.QMessageBox.warning(self, 'Warning', 'Select an output folder.')
+            QtWidgets.QMessageBox.warning(
+                self, 'Warning', 'Select an output folder.')
             return
 
         if not os.path.isdir(out):
             try:
                 os.makedirs(out)
             except Exception as e:
-                QtWidgets.QMessageBox.warning(self, 'Error', f'Unable to create folder: {str(e)}')
+                QtWidgets.QMessageBox.warning(
+                    self, 'Error', f'Unable to create folder: {str(e)}')
                 return
 
         # Get sections (optional)
@@ -562,7 +587,8 @@ class ClipDockWidget(QtWidgets.QDockWidget):
         """Generate a layout with Atlas enabled for sections"""
         try:
             # Find the sections layer
-            sections_layer = self._getSectionsLayer() if self.createSectionsCheck.isChecked() else None
+            sections_layer = self._getSectionsLayer(
+            ) if self.createSectionsCheck.isChecked() else None
 
             # Also check for "Profili DEM" layer from profile_tool
             if not sections_layer or sections_layer.featureCount() == 0:
@@ -574,20 +600,21 @@ class ClipDockWidget(QtWidgets.QDockWidget):
 
             if not sections_layer or sections_layer.featureCount() == 0:
                 QtWidgets.QMessageBox.warning(self, 'Warning',
-                    'No sections found!\n\n'
-                    'First create sections:\n'
-                    '1. Enable "Create sections/profiles"\n'
-                    '2. Click "Draw sections"\n'
-                    '3. Click two points on the map for each section')
+                                              'No sections found!\n\n'
+                                              'First create sections:\n'
+                                              '1. Enable "Create sections/profiles"\n'
+                                              '2. Click "Draw sections"\n'
+                                              '3. Click two points on the map for each section')
                 return
 
             # Get selected raster for the layout
             selected_rasters = [QgsProject.instance().mapLayer(i.data(Qt_UserRole))
-                               for i in self.rList.selectedItems()]
+                                for i in self.rList.selectedItems()]
             selected_rasters = [r for r in selected_rasters if r is not None]
 
             if not selected_rasters:
-                QtWidgets.QMessageBox.warning(self, 'Warning', 'Select at least one raster layer.')
+                QtWidgets.QMessageBox.warning(
+                    self, 'Warning', 'Select at least one raster layer.')
                 return
 
             raster_layer = selected_rasters[0]
@@ -597,7 +624,7 @@ class ClipDockWidget(QtWidgets.QDockWidget):
             from qgis.core import (QgsPrintLayout, QgsLayoutItemMap, QgsLayoutItemLabel,
                                    QgsLayoutItemPicture, QgsLayoutItemScaleBar, QgsLayoutSize,
                                    QgsLayoutPoint, QgsUnitTypes, QgsLayoutMeasurement,
-                                   QgsLayoutAtlas, QgsLayoutObject, QgsProperty)
+                                   QgsLayoutObject, QgsProperty)
             from datetime import datetime
 
             # Create layout
@@ -610,7 +637,8 @@ class ClipDockWidget(QtWidgets.QDockWidget):
 
             # Set page size (A3 Landscape)
             page = layout.pageCollection().page(0)
-            page.setPageSize(QgsLayoutSize(420, 297, QgsUnitTypes.LayoutMillimeters))
+            page.setPageSize(QgsLayoutSize(
+                420, 297, QgsUnitTypes.LayoutMillimeters))
 
             # Configure Atlas
             atlas = layout.atlas()
@@ -643,8 +671,10 @@ class ClipDockWidget(QtWidgets.QDockWidget):
             title = QgsLayoutItemLabel(layout)
             title.setText("TOPOGRAPHIC SECTION  [% \"label\" %]")
             title.setFont(QFont("Arial", 16, QFont.Bold))
-            title.attemptMove(QgsLayoutPoint(margin, title_y, QgsUnitTypes.LayoutMillimeters))
-            title.attemptResize(QgsLayoutSize(page_w - 2*margin, title_h, QgsUnitTypes.LayoutMillimeters))
+            title.attemptMove(QgsLayoutPoint(
+                margin, title_y, QgsUnitTypes.LayoutMillimeters))
+            title.attemptResize(QgsLayoutSize(
+                page_w - 2*margin, title_h, QgsUnitTypes.LayoutMillimeters))
             layout.addLayoutItem(title)
 
             # === MAP SECTION ===
@@ -658,26 +688,33 @@ class ClipDockWidget(QtWidgets.QDockWidget):
 
             # Main map
             map_item = QgsLayoutItemMap(layout)
-            map_item.attemptMove(QgsLayoutPoint(margin, map_y, QgsUnitTypes.LayoutMillimeters))
-            map_item.attemptResize(QgsLayoutSize(map_w, map_h, QgsUnitTypes.LayoutMillimeters))
+            map_item.attemptMove(QgsLayoutPoint(
+                margin, map_y, QgsUnitTypes.LayoutMillimeters))
+            map_item.attemptResize(QgsLayoutSize(
+                map_w, map_h, QgsUnitTypes.LayoutMillimeters))
             map_item.setExtent(raster_layer.extent())
             map_item.setFrameEnabled(True)
-            map_item.setFrameStrokeWidth(QgsLayoutMeasurement(0.3, QgsUnitTypes.LayoutMillimeters))
+            map_item.setFrameStrokeWidth(QgsLayoutMeasurement(
+                0.3, QgsUnitTypes.LayoutMillimeters))
 
             # Atlas: Auto scale to fit section line with small margin (0.05 = 5%)
             # This zooms the map to show the section line filling most of the frame
             map_item.setAtlasDriven(True)
             map_item.setAtlasScalingMode(QgsLayoutItemMap.Auto)
-            map_item.setAtlasMargin(0.05)  # 5% margin - tight fit around section
+            # 5% margin - tight fit around section
+            map_item.setAtlasMargin(0.05)
             layout.addLayoutItem(map_item)
 
             # === RIGHT PANEL ===
             # North arrow (top right)
             north = QgsLayoutItemPicture(layout)
             north.setMode(QgsLayoutItemPicture.FormatSVG)
-            north.setPicturePath(":/images/north_arrows/layout_default_north_arrow.svg")
-            north.attemptMove(QgsLayoutPoint(right_x, map_y, QgsUnitTypes.LayoutMillimeters))
-            north.attemptResize(QgsLayoutSize(25, 30, QgsUnitTypes.LayoutMillimeters))
+            north.setPicturePath(
+                ":/images/north_arrows/layout_default_north_arrow.svg")
+            north.attemptMove(QgsLayoutPoint(
+                right_x, map_y, QgsUnitTypes.LayoutMillimeters))
+            north.attemptResize(QgsLayoutSize(
+                25, 30, QgsUnitTypes.LayoutMillimeters))
             north.setFrameEnabled(True)
             layout.addLayoutItem(north)
 
@@ -689,8 +726,10 @@ class ClipDockWidget(QtWidgets.QDockWidget):
                 "Page: [% @atlas_featurenumber %] / [% @atlas_totalfeatures %]"
             )
             info_label.setFont(QFont("Arial", 9))
-            info_label.attemptMove(QgsLayoutPoint(right_x + 30, map_y, QgsUnitTypes.LayoutMillimeters))
-            info_label.attemptResize(QgsLayoutSize(right_w - 30, 30, QgsUnitTypes.LayoutMillimeters))
+            info_label.attemptMove(QgsLayoutPoint(
+                right_x + 30, map_y, QgsUnitTypes.LayoutMillimeters))
+            info_label.attemptResize(QgsLayoutSize(
+                right_w - 30, 30, QgsUnitTypes.LayoutMillimeters))
             info_label.setFrameEnabled(True)
             info_label.setBackgroundEnabled(True)
             info_label.setBackgroundColor(QColor(255, 255, 255))
@@ -704,8 +743,10 @@ class ClipDockWidget(QtWidgets.QDockWidget):
                 f"Raster: {raster_layer.name()}"
             )
             metadata_label.setFont(QFont("Arial", 8))
-            metadata_label.attemptMove(QgsLayoutPoint(right_x, map_y + 35, QgsUnitTypes.LayoutMillimeters))
-            metadata_label.attemptResize(QgsLayoutSize(right_w, 35, QgsUnitTypes.LayoutMillimeters))
+            metadata_label.attemptMove(QgsLayoutPoint(
+                right_x, map_y + 35, QgsUnitTypes.LayoutMillimeters))
+            metadata_label.attemptResize(QgsLayoutSize(
+                right_w, 35, QgsUnitTypes.LayoutMillimeters))
             metadata_label.setFrameEnabled(True)
             metadata_label.setBackgroundEnabled(True)
             metadata_label.setBackgroundColor(QColor(255, 255, 255))
@@ -719,8 +760,10 @@ class ClipDockWidget(QtWidgets.QDockWidget):
             scalebar.setNumberOfSegmentsLeft(0)
             scalebar.setStyle('Single Box')
             scalebar.setHeight(3)
-            scalebar.attemptMove(QgsLayoutPoint(right_x, map_y + 75, QgsUnitTypes.LayoutMillimeters))
-            scalebar.attemptResize(QgsLayoutSize(right_w, 15, QgsUnitTypes.LayoutMillimeters))
+            scalebar.attemptMove(QgsLayoutPoint(
+                right_x, map_y + 75, QgsUnitTypes.LayoutMillimeters))
+            scalebar.attemptResize(QgsLayoutSize(
+                right_w, 15, QgsUnitTypes.LayoutMillimeters))
             # Let QGIS auto-calculate units per segment based on map scale
             scalebar.setUnitLabel('m')
             layout.addLayoutItem(scalebar)
@@ -735,8 +778,10 @@ class ClipDockWidget(QtWidgets.QDockWidget):
             profile_title = QgsLayoutItemLabel(layout)
             profile_title.setText("ELEVATION PROFILE")
             profile_title.setFont(QFont("Arial", 11, QFont.Bold))
-            profile_title.attemptMove(QgsLayoutPoint(margin, profile_title_y, QgsUnitTypes.LayoutMillimeters))
-            profile_title.attemptResize(QgsLayoutSize(150, 8, QgsUnitTypes.LayoutMillimeters))
+            profile_title.attemptMove(QgsLayoutPoint(
+                margin, profile_title_y, QgsUnitTypes.LayoutMillimeters))
+            profile_title.attemptResize(QgsLayoutSize(
+                150, 8, QgsUnitTypes.LayoutMillimeters))
             layout.addLayoutItem(profile_title)
 
             # Profile image
@@ -744,7 +789,8 @@ class ClipDockWidget(QtWidgets.QDockWidget):
 
             save_dir = self.outEdit.text()
             if not save_dir:
-                save_dir, _ = QgsProject.instance().readEntry("ClipRasterLayout", "profile_save_dir")
+                save_dir, _ = QgsProject.instance().readEntry(
+                    "ClipRasterLayout", "profile_save_dir")
             if not save_dir:
                 import tempfile
                 save_dir = tempfile.gettempdir()
@@ -753,13 +799,17 @@ class ClipDockWidget(QtWidgets.QDockWidget):
 
             profile_pic.dataDefinedProperties().setProperty(
                 QgsLayoutObject.PictureSource,
-                QgsProperty.fromExpression(f"'{save_dir}/profile_' || \"label\" || '.png'")
+                QgsProperty.fromExpression(
+                    f"'{save_dir}/profile_' || \"label\" || '.png'")
             )
 
-            profile_pic.attemptMove(QgsLayoutPoint(margin, profile_y, QgsUnitTypes.LayoutMillimeters))
-            profile_pic.attemptResize(QgsLayoutSize(profile_w, profile_h, QgsUnitTypes.LayoutMillimeters))
+            profile_pic.attemptMove(QgsLayoutPoint(
+                margin, profile_y, QgsUnitTypes.LayoutMillimeters))
+            profile_pic.attemptResize(QgsLayoutSize(
+                profile_w, profile_h, QgsUnitTypes.LayoutMillimeters))
             profile_pic.setFrameEnabled(True)
-            profile_pic.setFrameStrokeWidth(QgsLayoutMeasurement(0.3, QgsUnitTypes.LayoutMillimeters))
+            profile_pic.setFrameStrokeWidth(
+                QgsLayoutMeasurement(0.3, QgsUnitTypes.LayoutMillimeters))
             profile_pic.setResizeMode(QgsLayoutItemPicture.Zoom)
             profile_pic.setBackgroundEnabled(True)
             profile_pic.setBackgroundColor(QColor(255, 255, 255))
@@ -771,17 +821,19 @@ class ClipDockWidget(QtWidgets.QDockWidget):
             # Open layout designer
             self.iface.openLayoutDesigner(layout)
 
-            self.updateStatus(f'Atlas layout created with {feature_count} sections!')
+            self.updateStatus(
+                f'Atlas layout created with {feature_count} sections!')
 
             QtWidgets.QMessageBox.information(self, 'Success',
-                f'Atlas layout created!\n\n'
-                f'Sections: {feature_count}\n\n'
-                f'In Layout Designer:\n'
-                f'- Use Atlas toolbar to preview pages\n'
-                f'- Export → Export as PDF to generate all pages')
+                                              f'Atlas layout created!\n\n'
+                                              f'Sections: {feature_count}\n\n'
+                                              f'In Layout Designer:\n'
+                                              f'- Use Atlas toolbar to preview pages\n'
+                                              f'- Export → Export as PDF to generate all pages')
 
         except Exception as e:
-            QtWidgets.QMessageBox.critical(self, 'Error', f'Error creating Atlas layout: {str(e)}')
+            QtWidgets.QMessageBox.critical(
+                self, 'Error', f'Error creating Atlas layout: {str(e)}')
             import traceback
             traceback.print_exc()
 
@@ -790,7 +842,7 @@ class ClipDockWidget(QtWidgets.QDockWidget):
         try:
             QgsProject.instance().layersAdded.disconnect(self.onLayersChanged)
             QgsProject.instance().layersRemoved.disconnect(self.onLayersChanged)
-        except:
+        except Exception:
             pass
         super().closeEvent(event)
 
@@ -829,7 +881,8 @@ class SectionTool(QgsMapTool):
                         self.dock_widget.updateSectionCount()
                         self.dock_widget.updateStatus(f'Section {lbl} created')
                 except Exception as e:
-                    QtWidgets.QMessageBox.warning(None, 'Error', f'Error creating section: {str(e)}')
+                    QtWidgets.QMessageBox.warning(
+                        None, 'Error', f'Error creating section: {str(e)}')
                 finally:
                     self.rb.reset(QgsWkbTypes.LineGeometry)
                     self.points = []
@@ -845,6 +898,7 @@ class SectionTool(QgsMapTool):
 
 class PolygonDrawTool(QgsMapTool):
     """Tool for drawing clip polygons"""
+
     def __init__(self, canvas, layer, dock_widget=None):
         super().__init__(canvas)
         self.canvas = canvas
@@ -880,7 +934,8 @@ class PolygonDrawTool(QgsMapTool):
                 self.points.append(self.points[0])
                 feat = QgsFeature(self.layer.fields())
                 feat.setGeometry(QgsGeometry.fromPolygonXY([self.points]))
-                feat.setAttribute('name', f'Clip_{self.layer.featureCount() + 1}')
+                feat.setAttribute(
+                    'name', f'Clip_{self.layer.featureCount() + 1}')
                 self.layer.addFeature(feat)
                 self.layer.updateExtents()
                 self.layer.commitChanges()
@@ -889,10 +944,12 @@ class PolygonDrawTool(QgsMapTool):
                 if self.dock_widget:
                     self.dock_widget.onPolygonDrawn()
             except Exception as e:
-                QtWidgets.QMessageBox.warning(None, 'Error', f'Error creating polygon: {str(e)}')
+                QtWidgets.QMessageBox.warning(
+                    None, 'Error', f'Error creating polygon: {str(e)}')
         else:
             if self.dock_widget:
-                self.dock_widget.updateStatus('At least 3 points are needed to create a polygon')
+                self.dock_widget.updateStatus(
+                    'At least 3 points are needed to create a polygon')
 
         self.rb.reset(QgsWkbTypes.PolygonGeometry)
         self.points = []
@@ -913,6 +970,7 @@ class PolygonDrawTool(QgsMapTool):
 
 class TutorialDialog(QtWidgets.QDialog):
     """Tutorial dialog with usage instructions"""
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle('Tutorial - Clip & Profile')
